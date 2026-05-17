@@ -1,0 +1,77 @@
+#include <ESP32Servo.h>
+
+// SENSOR
+const int trigPin = 5;
+const int echoPin = 18;
+
+// LEDS
+const int ledVerde = 25;
+const int ledVermelho = 26;
+
+// SERVO
+const int servoPin = 13;
+
+Servo servoMotor;
+
+long duracao;
+float distancia;
+
+void setup() {
+
+  Serial.begin(115200);
+
+  pinMode(trigPin, OUTPUT);
+  pinMode(echoPin, INPUT);
+
+  pinMode(ledVerde, OUTPUT);
+  pinMode(ledVermelho, OUTPUT);
+
+  servoMotor.attach(servoPin);
+
+  servoMotor.write(0);
+
+  Serial.println("Sistema iniciado");
+}
+
+void loop() {
+
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(2);
+
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(10);
+
+  digitalWrite(trigPin, LOW);
+
+  duracao = pulseIn(echoPin, HIGH);
+
+  distancia = duracao * 0.034 / 2;
+
+  Serial.print("Distancia: ");
+  Serial.print(distancia);
+  Serial.println(" cm");
+
+  // SITUAÇÃO CRÍTICA
+  if (distancia < 15) {
+
+    digitalWrite(ledVerde, LOW);
+    digitalWrite(ledVermelho, HIGH);
+
+    Serial.println("Nivel critico detectado");
+
+    servoMotor.write(90);
+
+    delay(2000);
+
+    servoMotor.write(0);
+
+  } else {
+
+    digitalWrite(ledVerde, HIGH);
+    digitalWrite(ledVermelho, LOW);
+
+    Serial.println("Nivel normal");
+  }
+
+  delay(1000);
+}
