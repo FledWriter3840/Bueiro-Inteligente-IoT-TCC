@@ -121,7 +121,7 @@ Bueiro-Inteligente-IoT-TCC/
 
 ## FIGURA 5 - DIAGRAMA ENTIDADE RELACIONAMENTO
 
-![DER](imagens/FIGURA%205%20-%20Diagrama%20Entidade-relacionamento.png)
+![DER](imagens/FIGURA%205%20%E2%80%93%20Diagrama%20Entidade-Relacionamento%20do%20Sistema.png)
 
 ---
 
