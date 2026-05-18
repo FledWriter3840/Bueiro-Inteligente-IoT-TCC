@@ -128,6 +128,14 @@ Bueiro-Inteligente-IoT-TCC/
 
 ---
 
+
+# 👨‍🏫 Professor/Orientador
+
+- Andre Muniz
+
+
+---
+
 # 🎓 Universidade
 
 Universidade Paulista — UNIP  
