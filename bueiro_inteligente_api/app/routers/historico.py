@@ -9,7 +9,7 @@ router = APIRouter(
 
 @router.post("/", response_model=schemas.HistoricoOut)
 def registrar_historico(historico: schemas.HistoricoCreate, db: Session = Depends(get_db)):
-    novo_evento = models.Historico(
+    novo_evento = models.HistoricoSistema(
         descricao_evento = historico.descricao_evento,
         id_usuario = historico.id_usuario
     )
