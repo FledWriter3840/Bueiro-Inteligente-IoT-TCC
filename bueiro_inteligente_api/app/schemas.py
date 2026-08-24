@@ -50,3 +50,30 @@ class HistoricoOut(HistoricoCreate):
     data_hora: datetime
     class Config:
         from_attributes = True
+
+class PrevisaoEntupimentoCreate(BaseModel):
+    probabilidade: float
+    nivel_risco: str
+    id_leitura: int
+
+class PrevisaoEntupimentoOut(PrevisaoEntupimentoCreate):
+    id_previsao: int
+    data_hora: datetime
+    class Config:
+        from_attributes = True
+
+class AnaliseIAResult(BaseModel):
+    probabilidade_entupimento: float
+    nivel_risco: str
+    tendencia: str
+    taxa_variacao_cm_min: float
+    distancia_atual_cm: float
+    tempo_estimado_transbordo_min: float | None
+    recomendacao: str
+    alerta_gerado: bool
+    data_analise: datetime
+
+class CenarioSimulacaoRequest(BaseModel):
+    distancia_inicial_cm: float = 350.0
+    velocidade_subida_cm_min: float = 25.0
+    minutos_simulacao: int = 10

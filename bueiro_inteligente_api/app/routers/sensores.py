@@ -3,16 +3,17 @@ from sqlalchemy.orm import Session
 from .. import models, schemas
 from ..database import get_db
 
+from ..ai_predictor import PrevisorEntupimentoIA
+
 router = APIRouter(
     prefix="/sensores",
     tags=["Sensores"]
 )
 
 @router.post("/leitura", response_model=schemas.LeituraSensorOut)
-
 def registrar_leitura(leitura: schemas.LeituraSensorCreate, db: Session = Depends(get_db)):
     """
-    Registra uma nova leitura de sensor no banco de dados.
+    Registra uma nova leitura de sensor no banco de dados e executa a IA preditiva.
     """
     nova_leitura = models.LeituraSensor(
         valor_leitura = leitura.valor_leitura,
@@ -22,6 +23,13 @@ def registrar_leitura(leitura: schemas.LeituraSensorCreate, db: Session = Depend
     db.add(nova_leitura)
     db.commit()
     db.refresh(nova_leitura)
+
+    # Executa a IA preditiva para avaliar risco de transbordo e gravar na tabela previsaoentupimento
+    try:
+        PrevisorEntupimentoIA.analisar_e_prever(db=db, id_sensor=nova_leitura.id_sensor, persistir=True)
+    except Exception as e:
+        print(f"Aviso: Falha ao executar preditor de IA: {e}")
+
     return nova_leitura
 
 @router.get("/leituras", response_model=list[schemas.LeituraSensorOut])
