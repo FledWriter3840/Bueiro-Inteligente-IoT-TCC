@@ -1,0 +1,4 @@
+[wokwi]
+version = 1
+firmware = 'bueiro_firmware/.pio/build/upesy_wroom/firmware.bin'
+elf = 'bueiro_firmware/.pio/build/upesy_wroom/firmware.elf'

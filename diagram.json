@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "author": "Matheus",
+  "editor": "wokwi",
+  "parts": [
+    { "type": "wokwi-esp32-devkit-v1", "id": "esp", "top": 0, "left": 0, "attrs": {} },
+    { "type": "wokwi-hc-sr04", "id": "sensor", "top": -50, "left": 150, "attrs": {} },
+    { "type": "wokwi-servo", "id": "servo", "top": 100, "left": 150, "attrs": {} },
+    { "type": "wokwi-led", "id": "led1", "top": 50, "left": 250, "attrs": { "color": "red" } }
+  ],
+  "connections": [
+    [ "esp:D5", "sensor:TRIG", "green", [] ],
+    [ "esp:D18", "sensor:ECHO", "green", [] ],
+    [ "sensor:VCC", "esp:5V", "red", [] ],
+    [ "sensor:GND", "esp:GND.1", "black", [] ],
+    [ "esp:D15", "servo:PWM", "green", [] ],
+    [ "servo:V+", "esp:5V", "red", [] ],
+    [ "servo:GND", "esp:GND.2", "black", [] ],
+    [ "esp:D2", "led1:A", "green", [] ],
+    [ "led1:C", "esp:GND.3", "black", [] ]
+  ]
+}
