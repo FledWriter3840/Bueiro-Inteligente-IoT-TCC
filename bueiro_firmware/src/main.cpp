@@ -1,12 +1,13 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <ESP32Servo.h>
+#include <WiFiClientSecure.h>
 
 const char* ssid = "Wokwi-GUEST";
 const char* password = "";
 
 // URL HTTP direta compatível com o simulador Wokwi
-const char* apiUrl = "http://shy-ideas-itch.loca.lt/sensores/leitura";
+const char* apiUrl = "https://vast-pens-teach.loca.lt/sensores/leitura";
 
 const int trigPin = 5;
 const int echoPin = 18;
@@ -51,17 +52,22 @@ float lerDistancia() {
 
 void enviarLeituraParaAPI(float valor) {
   if (WiFi.status() == WL_CONNECTED) {
-    WiFiClient client;
+    WiFiClientSecure client;
+    client.setInsecure(); // Pula a verificação estrita de certificado SSL
+
     HTTPClient http;
     http.setTimeout(10000);
 
     if (http.begin(client, apiUrl)) {
       http.addHeader("Content-Type", "application/json");
-      http.addHeader("bypass-tunnel-reminder", "true");
+      
+      // Cabeçalhos para evitar as telas de aviso dos túneis
+      http.addHeader("bypass-tunnel-reminder", "true");  // Para LocalTunnel
+      http.addHeader("ngrok-skip-browser-warning", "true"); // Para Ngrok
       http.addHeader("User-Agent", "ESP32-Bueiro");
 
       String jsonBody = "{\"valor_leitura\": " + String(valor, 2) +
-                         ", \"unidade_medida\": \"cm\", \"id_sensor\": 1}";
+                        ", \"unidade_medida\": \"cm\", \"id_sensor\": 1}";
 
       Serial.println(">> Enviando dados para a API...");
       int httpCode = http.POST(jsonBody);

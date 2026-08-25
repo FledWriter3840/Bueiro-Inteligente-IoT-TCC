@@ -76,4 +76,28 @@ class AnaliseIAResult(BaseModel):
 class CenarioSimulacaoRequest(BaseModel):
     distancia_inicial_cm: float = 350.0
     velocidade_subida_cm_min: float = 25.0
-    minutos_simulacao: int = 10
+    minutos_simulacao: int = 10
+
+class AnaliseIAMLResult(BaseModel):
+    nivel_risco: str
+    probabilidade_classe: float
+    classes_probabilidades: dict[str, float]
+    distancia_atual_cm: float
+    taxa_subida_cm_min: float
+    media_movel_3_cm: float
+    modelo_utilizado: str
+    data_analise: datetime
+
+class TreinoMLResult(BaseModel):
+    acuracia: float
+    relatorio_classificacao: str
+    matriz_confusao: list
+    classes: list[str]
+    n_amostras_treino: int
+    n_amostras_teste: int
+
+class ComparativoIAResult(BaseModel):
+    motor_regressao: AnaliseIAResult
+    motor_machine_learning: AnaliseIAMLResult
+    convergencia: bool
+    observacao: str

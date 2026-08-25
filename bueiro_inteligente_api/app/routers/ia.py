@@ -3,6 +3,8 @@ from sqlalchemy.orm import Session
 from .. import models, schemas
 from ..database import get_db
 from ..ai_predictor import PrevisorEntupimentoIA
+from ..ml.predictor import PrevisorEntupimentoML
+from ..ml.train import treinar_modelo as treinar_modelo_ml_fn
 from datetime import datetime
 
 router = APIRouter(
@@ -71,3 +73,57 @@ def simular_cenario_chuva(cenario: schemas.CenarioSimulacaoRequest):
         },
         "projecoes": projecoes
     }
+
+
+@router.get("/previsao-ml", response_model=schemas.AnaliseIAMLResult)
+def obter_previsao_ml(id_sensor: int = 1, persistir: bool = False, db: Session = Depends(get_db)):
+    """
+    Previsão via Machine Learning (scikit-learn, DecisionTreeClassifier),
+    treinado sobre dataset sintético — complementar ao /ia/previsao
+    (motor de regressão/tendência temporal).
+    """
+    return PrevisorEntupimentoML.prever(db=db, id_sensor=id_sensor, persistir=persistir)
+
+@router.post("/treinar-modelo-ml", response_model=schemas.TreinoMLResult)
+def treinar_modelo_ml(n_amostras: int = 3000):
+    """
+    Re-treina o modelo de ML sobre um novo dataset sintético. Útil para
+    demonstrar o pipeline de treino/avaliação na banca de TCC.
+    """
+    return treinar_modelo_ml_fn(n_amostras=n_amostras)
+
+@router.get("/comparativo", response_model=schemas.ComparativoIAResult)
+def comparar_motores_ia(id_sensor: int = 1, persistir: bool = False, db: Session = Depends(get_db)):
+    """
+    Executa os dois motores de previsão (regressão/tendência temporal e
+    Machine Learning via scikit-learn) sobre as mesmas leituras recentes
+    e retorna os dois resultados lado a lado, com um veredito de
+    convergência entre eles. Pensado para demonstração na banca de TCC.
+    """
+    resultado_regressao = PrevisorEntupimentoIA.analisar_e_prever(
+        db=db, id_sensor=id_sensor, persistir=persistir
+    )
+    resultado_ml = PrevisorEntupimentoML.prever(
+        db=db, id_sensor=id_sensor, persistir=False
+    )
+
+    convergencia = resultado_regressao.nivel_risco == resultado_ml.nivel_risco
+
+    if convergencia:
+        observacao = (
+            f"Os dois motores concordam: risco '{resultado_regressao.nivel_risco}'. "
+            "Isso reforça a confiabilidade do diagnóstico."
+        )
+    else:
+        observacao = (
+            f"Divergência entre os motores: regressão indica '{resultado_regressao.nivel_risco}', "
+            f"Machine Learning indica '{resultado_ml.nivel_risco}'. "
+            "Recomenda-se monitoramento contínuo até a próxima leitura confirmar a tendência."
+        )
+
+    return schemas.ComparativoIAResult(
+        motor_regressao=resultado_regressao,
+        motor_machine_learning=resultado_ml,
+        convergencia=convergencia,
+        observacao=observacao
+    )
