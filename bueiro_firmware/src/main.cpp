@@ -7,7 +7,7 @@ const char* ssid = "Wokwi-GUEST";
 const char* password = "";
 
 // URL HTTP direta compatível com o simulador Wokwi
-const char* apiUrl = "https://vast-pens-teach.loca.lt/sensores/leitura";
+const char* apiUrl = "https://true-gifts-begin.loca.lt/sensores/leitura";
 
 const int trigPin = 5;
 const int echoPin = 18;

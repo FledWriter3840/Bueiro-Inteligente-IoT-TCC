@@ -5,6 +5,9 @@ from ..database import get_db
 from ..ai_predictor import PrevisorEntupimentoIA
 from ..ml.predictor import PrevisorEntupimentoML
 from ..ml.train import treinar_modelo as treinar_modelo_ml_fn
+from ..weather_service import obter_dados_climaticos_dict
+from ..dados_externos import historico_alagamentos, dados_geograficos, uso_do_solo
+from ..config import BUEIRO_LATITUDE, BUEIRO_LONGITUDE
 from datetime import datetime
 
 router = APIRouter(
@@ -15,8 +18,9 @@ router = APIRouter(
 @router.get("/previsao", response_model=schemas.AnaliseIAResult)
 def obter_previsao_atual(id_sensor: int = 1, db: Session = Depends(get_db)):
     """
-    Executa o modelo de Machine Learning / Tendência Temporal sobre as leituras
-    recentes do sensor no banco de dados e retorna o diagnóstico de risco de alagamento.
+    Executa o motor de IA multivariado sobre as leituras recentes do sensor
+    e todas as fontes de dados disponíveis (clima, temporal, geográfico, etc.).
+    Retorna o diagnóstico de risco de alagamento e recomendação de limpeza.
     (Atende ao requisito RF15 / UC09).
     """
     return PrevisorEntupimentoIA.analisar_e_prever(db=db, id_sensor=id_sensor, persistir=True)
@@ -127,3 +131,71 @@ def comparar_motores_ia(id_sensor: int = 1, persistir: bool = False, db: Session
         convergencia=convergencia,
         observacao=observacao
     )
+
+
+# ═══════════════════════════════════════════════════════════════════
+# NOVOS ENDPOINTS
+# ═══════════════════════════════════════════════════════════════════
+
+@router.get("/clima-atual")
+def obter_clima_atual():
+    """
+    Consulta os dados climáticos atuais via OpenWeatherMap.
+    Retorna precipitação, umidade, vento, previsão de chuva e descrição.
+    Requer OPENWEATHER_API_KEY configurada no .env.
+    """
+    return obter_dados_climaticos_dict(
+        lat=BUEIRO_LATITUDE,
+        lon=BUEIRO_LONGITUDE,
+    )
+
+
+@router.get("/fontes-dados")
+def listar_fontes_dados():
+    """
+    Lista quais fontes de dados estão ativas/carregadas no sistema.
+    Útil para diagnóstico e verificação da configuração.
+    """
+    return {
+        "fontes": [
+            {
+                "nome": "Sensor IoT (Telemetria)",
+                "status": "Ativo",
+                "descricao": "Dados do sensor ultrassônico e compactação via banco de dados MySQL.",
+            },
+            {
+                "nome": "OpenWeatherMap (Clima)",
+                "status": "Ativo" if obter_dados_climaticos_dict().get("disponivel") else "Indisponível (configurar OPENWEATHER_API_KEY)",
+                "descricao": "Dados climáticos em tempo real: chuva, umidade, vento, previsão.",
+            },
+            {
+                "nome": "Dados Temporais (datetime)",
+                "status": "Ativo",
+                "descricao": "Features derivadas do horário: estação do ano, horário de pico, feriados SP.",
+            },
+            {
+                "nome": "Histórico de Alagamentos (CGE SP)",
+                "status": "Ativo" if historico_alagamentos.disponivel else "Esqueleto (aguardando dataset)",
+                "descricao": "Pontos recorrentes de alagamento e manchas de inundação.",
+            },
+            {
+                "nome": "Dados Geográficos (GeoSampa)",
+                "status": "Ativo" if dados_geograficos.disponivel else "Esqueleto (aguardando dataset)",
+                "descricao": "Altitude relativa, fundo de vale, classificação de áreas de risco.",
+            },
+            {
+                "nome": "Uso do Solo (Entorno)",
+                "status": "Ativo" if uso_do_solo.disponivel else "Esqueleto (aguardando dataset)",
+                "descricao": "Tipo de via, proximidade com feiras/parques, impermeabilização.",
+            },
+        ],
+        "total_ativas": sum([
+            True,  # Sensor sempre ativo
+            obter_dados_climaticos_dict().get("disponivel", False),
+            True,  # Temporal sempre ativo
+            historico_alagamentos.disponivel,
+            dados_geograficos.disponivel,
+            uso_do_solo.disponivel,
+        ]),
+        "total_fontes": 6,
+    }

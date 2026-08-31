@@ -1,0 +1,4 @@
+latitude,longitude,altitude_m,fundo_de_vale,classificacao_risco,declividade_pct
+-23.5505,-46.6333,745.0,1,"Alto",-3.2
+-23.5489,-46.6388,730.0,1,"Muito Alto",-4.5
+-23.5610,-46.6560,820.0,0,"Baixo",0.5

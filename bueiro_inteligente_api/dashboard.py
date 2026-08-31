@@ -60,7 +60,7 @@ with tab_geral:
     alertas = get_json("/alertas/") or []
     previsao = get_json("/ia/previsao", params={"id_sensor": 1})
 
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col5 = st.columns(5)
 
     if leituras:
         ultima = leituras[0]
@@ -69,18 +69,26 @@ with tab_geral:
         col1.metric("Última leitura", "sem dados")
 
     if previsao:
-        col2.metric("Risco (motor regressão)", previsao["nivel_risco"])
+        col2.metric("Risco de Alagamento", previsao["nivel_risco"])
         col3.metric("Probabilidade", f"{previsao['probabilidade_entupimento'] * 100:.0f}%")
+        urgencia = previsao.get("urgencia_limpeza", "Rotina")
+        col4.metric("Urgência Limpeza", urgencia)
     else:
         col2.metric("Risco", "—")
         col3.metric("Probabilidade", "—")
+        col4.metric("Urgência Limpeza", "—")
 
-    col4.metric("Alertas registrados", len(alertas))
+    col5.metric("Alertas registrados", len(alertas))
 
-    if previsao and previsao["nivel_risco"] in ("Alto", "Crítico"):
-        st.error(f"⚠️ {previsao['recomendacao']}")
-    elif previsao:
-        st.success(previsao["recomendacao"])
+    if previsao:
+        if previsao["nivel_risco"] in ("Alto", "Crítico"):
+            st.error(f"⚠️ **Risco Iminente:** {previsao['recomendacao']}")
+        else:
+            st.success(f"ℹ️ **Status:** {previsao['recomendacao']}")
+
+        rec_limp = previsao.get("recomendacao_limpeza")
+        if rec_limp:
+            st.info(f"🧹 **Diretriz de Limpeza:** {rec_limp}")
 
     st.divider()
 
@@ -163,13 +171,23 @@ with tab_ia:
             col1, col2 = st.columns(2)
 
             with col1:
-                st.markdown("### 📐 Motor de Regressão")
+                st.markdown("### 📐 Motor Multivariado (6 Fontes)")
                 r = comparativo["motor_regressao"]
                 st.metric("Risco", r["nivel_risco"])
                 st.metric("Probabilidade", f"{r['probabilidade_entupimento'] * 100:.0f}%")
+                st.write(f"**Urgência de Limpeza:** {r.get('urgencia_limpeza', 'Rotina')}")
                 st.write(f"**Tendência:** {r['tendencia']}")
                 st.write(f"**Taxa de variação:** {r['taxa_variacao_cm_min']:.2f} cm/min")
                 st.write(f"**Recomendação:** {r['recomendacao']}")
+                if r.get("recomendacao_limpeza"):
+                    st.info(f"🧹 **Limpeza:** {r['recomendacao_limpeza']}")
+
+                # Scores por dimensão
+                scores = r.get("scores_detalhados", {})
+                if scores:
+                    st.markdown("#### Scores por Dimensão:")
+                    df_scores = pd.DataFrame(list(scores.items()), columns=["Dimensão", "Score (0-1)"])
+                    st.bar_chart(df_scores.set_index("Dimensão"))
 
             with col2:
                 st.markdown("### 🤖 Motor Machine Learning")
@@ -180,6 +198,15 @@ with tab_ia:
                 st.write("**Probabilidades por classe:**")
                 st.bar_chart(pd.Series(m["classes_probabilidades"]))
 
+                # Dados climáticos
+                clima = r.get("dados_climaticos_utilizados")
+                if clima:
+                    st.markdown("#### 🌦️ Condições Climáticas Atuais:")
+                    st.write(f"- **Condição:** {clima.get('descricao', 'N/A')}")
+                    st.write(f"- **Chuva acumulada:** {clima.get('chuva_mm_h', 0.0)} mm/h")
+                    st.write(f"- **Umidade:** {clima.get('umidade_pct', 0)}%")
+                    st.write(f"- **Previsão (3h):** {clima.get('previsao_chuva_3h_mm', 0.0)} mm")
+
             st.divider()
             if comparativo["convergencia"]:
                 st.success(f"✅ {comparativo['observacao']}")
@@ -187,6 +214,14 @@ with tab_ia:
                 st.warning(f"⚠️ {comparativo['observacao']}")
     else:
         st.info("Clique no botão acima para rodar os dois motores sobre a leitura mais recente.")
+
+    st.divider()
+    st.subheader("🌐 Status das Fontes de Dados (Multivariado)")
+    fontes_info = get_json("/ia/fontes-dados")
+    if fontes_info:
+        st.write(f"**Total de fontes ativas:** {fontes_info.get('total_ativas', 0)} de {fontes_info.get('total_fontes', 6)}")
+        df_fontes = pd.DataFrame(fontes_info.get("fontes", []))
+        st.dataframe(df_fontes, use_container_width=True, hide_index=True)
 
     st.divider()
     st.subheader("Treinar/retreinar o modelo de Machine Learning")

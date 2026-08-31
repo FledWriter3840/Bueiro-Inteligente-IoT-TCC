@@ -63,6 +63,7 @@ class PrevisaoEntupimentoOut(PrevisaoEntupimentoCreate):
         from_attributes = True
 
 class AnaliseIAResult(BaseModel):
+    # ── Campos originais (mantidos para compatibilidade) ──────────
     probabilidade_entupimento: float
     nivel_risco: str
     tendencia: str
@@ -72,6 +73,22 @@ class AnaliseIAResult(BaseModel):
     recomendacao: str
     alerta_gerado: bool
     data_analise: datetime
+
+    # ── Novos campos: recomendação de limpeza ─────────────────────
+    urgencia_limpeza: str = "Rotina"
+    """Rotina / Preventiva / Urgente / Emergência"""
+    recomendacao_limpeza: str = ""
+    """Texto detalhado da recomendação de limpeza."""
+    proxima_limpeza_sugerida_min: float | None = None
+    """Tempo sugerido até a próxima limpeza (minutos). None = manter rotina."""
+
+    # ── Novos campos: detalhamento do scoring ─────────────────────
+    scores_detalhados: dict[str, float] = {}
+    """Score individual de cada dimensão (sensor, clima, temporal, etc)."""
+    dados_climaticos_utilizados: dict | None = None
+    """Dados climáticos usados na análise (None se indisponível)."""
+    fontes_dados_disponiveis: list[str] = []
+    """Lista de fontes de dados que foram efetivamente utilizadas."""
 
 class CenarioSimulacaoRequest(BaseModel):
     distancia_inicial_cm: float = 350.0

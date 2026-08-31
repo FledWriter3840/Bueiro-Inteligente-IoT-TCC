@@ -1,0 +1,7 @@
+{
+  "tipo_via": "Comercial",
+  "proximidade_feira_m": 120.0,
+  "proximidade_parque_m": 650.0,
+  "indice_impermeabilizacao": 0.85,
+  "zona_comercial_intensa": true
+}
