@@ -26,6 +26,7 @@ from .config import (
     DADOS_ALAGAMENTOS_PATH,
     DADOS_GEOGRAFICOS_PATH,
     DADOS_USO_SOLO_PATH,
+    OPENTOPOGRAPHY_API_KEY,
 )
 
 logger = logging.getLogger(__name__)
@@ -84,8 +85,9 @@ class HistoricoAlagamentosProvider:
         """
         Carrega pontos de alagamento de um arquivo CSV.
 
-        Retorna o número de registros carregados.
-        Formato esperado: latitude,longitude,frequencia_anual,severidade_media,descricao
+        Suporta tanto o formato padrão (latitude,longitude,frequencia_anual,severidade_media,descricao)
+        quanto o formato oficial da ARTESP/Concessionárias (alagamento_erosao_talude.csv com
+        LATITUDE, LONGITUDE, EVENTO, INTERDICAO, MUNICIPIO, RODOVIA).
         """
         caminho = Path(caminho)
         if not caminho.exists():
@@ -94,18 +96,60 @@ class HistoricoAlagamentosProvider:
 
         self._pontos.clear()
         try:
-            with open(caminho, "r", encoding="utf-8") as f:
+            with open(caminho, "r", encoding="utf-8", errors="replace") as f:
                 reader = csv.DictReader(f)
-                for row in reader:
-                    self._pontos.append(PontoAlagamento(
-                        latitude=float(row.get("latitude", 0)),
-                        longitude=float(row.get("longitude", 0)),
-                        frequencia_anual=int(row.get("frequencia_anual", 1)),
-                        severidade_media=float(row.get("severidade_media", 0.5)),
-                        descricao=row.get("descricao", ""),
-                    ))
-            self._carregado = True
-            logger.info("Carregados %d pontos de alagamento de %s", len(self._pontos), caminho)
+                fieldnames = [k.upper().strip() for k in (reader.fieldnames or [])]
+                is_artesp = "EVENTO" in fieldnames and "INTERDICAO" in fieldnames
+
+                for raw_row in reader:
+                    row = {k.upper().strip(): (v or "").strip() for k, v in raw_row.items() if k}
+
+                    if is_artesp:
+                        evento = row.get("EVENTO", "").upper()
+                        if evento not in ("ALAGAMENTO", "EROSAO", "QUEDA DE TALUDE"):
+                            continue
+
+                        lat_str = row.get("LATITUDE", "").replace(",", ".")
+                        lon_str = row.get("LONGITUDE", "").replace(",", ".")
+                        if not lat_str or not lon_str:
+                            continue
+                        try:
+                            lat = float(lat_str)
+                            lon = float(lon_str)
+                        except ValueError:
+                            continue
+
+                        interdicao = row.get("INTERDICAO", "").upper()
+                        severidade = 0.9 if "COM INTERDICAO" in interdicao else (0.7 if evento == "ALAGAMENTO" else 0.5)
+                        municipio = row.get("MUNICIPIO", "")
+                        rodovia = row.get("RODOVIA", "")
+                        desc = f"{evento} - {rodovia} ({municipio})" if municipio else evento
+
+                        self._pontos.append(PontoAlagamento(
+                            latitude=lat,
+                            longitude=lon,
+                            frequencia_anual=1,
+                            severidade_media=severidade,
+                            descricao=desc,
+                        ))
+                    else:
+                        lat_val = row.get("LATITUDE", "0").replace(",", ".")
+                        lon_val = row.get("LONGITUDE", "0").replace(",", ".")
+                        try:
+                            lat = float(lat_val)
+                            lon = float(lon_val)
+                        except ValueError:
+                            continue
+                        self._pontos.append(PontoAlagamento(
+                            latitude=lat,
+                            longitude=lon,
+                            frequencia_anual=int(row.get("FREQUENCIA_ANUAL", 1) or 1),
+                            severidade_media=float(row.get("SEVERIDADE_MEDIA", 0.5) or 0.5),
+                            descricao=row.get("DESCRICAO", ""),
+                        ))
+
+            self._carregado = len(self._pontos) > 0
+            logger.info("Carregados %d registros de alagamento de %s", len(self._pontos), caminho)
             return len(self._pontos)
         except Exception as exc:
             logger.error("Erro ao carregar CSV de alagamentos: %s", exc)
@@ -165,7 +209,12 @@ class HistoricoAlagamentosProvider:
             )
 
         pontos_proximos = []
+        # Margem rápida em graus para pré-filtrar antes do haversine
+        margem_graus = (raio_metros / 111_000.0) * 1.5
+
         for ponto in self._pontos:
+            if abs(lat - ponto.latitude) > margem_graus or abs(lon - ponto.longitude) > margem_graus:
+                continue
             dist = _haversine_metros(lat, lon, ponto.latitude, ponto.longitude)
             if dist <= raio_metros:
                 pontos_proximos.append(ponto)
@@ -229,7 +278,7 @@ class DadosGeograficosProvider:
 
     @property
     def disponivel(self) -> bool:
-        return self._carregado
+        return self._carregado or bool(OPENTOPOGRAPHY_API_KEY)
 
     def carregar_de_csv(self, caminho: str | Path) -> int:
         """Carrega dados topográficos de CSV."""
@@ -294,33 +343,51 @@ class DadosGeograficosProvider:
 
     def obter_perfil_topografico(self, lat: float, lon: float) -> PerfilTopografico:
         """
-        Busca o perfil topográfico do ponto mais próximo.
-
-        Se o dataset não foi carregado, retorna perfil DEFAULT conservador
-        (assume fundo de vale = False, risco não classificado).
+        Busca o perfil topográfico do ponto.
+        1. Se houver dataset local carregado (GeoSampa CSV/GeoJSON), busca o ponto mais próximo.
+        2. Se houver OPENTOPOGRAPHY_API_KEY configurada, consulta a API Copernicus DEM GLO-30.
+        3. Se nenhum estiver disponível, retorna perfil padrão seguro/conservador.
         """
-        if not self._carregado or not self._pontos:
-            return PerfilTopografico(disponivel=False)
+        if self._carregado and self._pontos:
+            melhor = None
+            melhor_dist = float("inf")
+            for ponto in self._pontos:
+                dist = _haversine_metros(lat, lon, ponto["latitude"], ponto["longitude"])
+                if dist < melhor_dist:
+                    melhor_dist = dist
+                    melhor = ponto
 
-        # Encontra o ponto mais próximo
-        melhor = None
-        melhor_dist = float("inf")
-        for ponto in self._pontos:
-            dist = _haversine_metros(lat, lon, ponto["latitude"], ponto["longitude"])
-            if dist < melhor_dist:
-                melhor_dist = dist
-                melhor = ponto
+            if melhor is not None and melhor_dist <= 1000:
+                return PerfilTopografico(
+                    altitude_metros=melhor["altitude_m"],
+                    eh_fundo_de_vale=melhor["fundo_de_vale"],
+                    classificacao_risco=melhor["classificacao_risco"],
+                    declividade_pct=melhor["declividade_pct"],
+                    disponivel=True,
+                )
 
-        if melhor is None or melhor_dist > 1000:
-            # Nenhum ponto próximo o suficiente (> 1km)
-            return PerfilTopografico(disponivel=True)
+        # 2. Tentar API OpenTopography (Copernicus DEM)
+        if OPENTOPOGRAPHY_API_KEY:
+            try:
+                from .topography_service import topografia_service
+                perfil_api = topografia_service.obter_perfil_completo(lat, lon)
+                if perfil_api.disponivel:
+                    return PerfilTopografico(
+                        altitude_metros=perfil_api.altitude_metros,
+                        eh_fundo_de_vale=perfil_api.eh_fundo_de_vale,
+                        classificacao_risco=perfil_api.classificacao_risco,
+                        declividade_pct=perfil_api.declividade_pct,
+                        disponivel=True,
+                    )
+            except Exception as exc:
+                logger.warning("Falha ao obter topografia via OpenTopography: %s", exc)
 
         return PerfilTopografico(
-            altitude_metros=melhor["altitude_m"],
-            eh_fundo_de_vale=melhor["fundo_de_vale"],
-            classificacao_risco=melhor["classificacao_risco"],
-            declividade_pct=melhor["declividade_pct"],
-            disponivel=True,
+            altitude_metros=760.0,
+            eh_fundo_de_vale=False,
+            classificacao_risco="Conservador (API/dataset não configurado)",
+            declividade_pct=0.0,
+            disponivel=False,
         )
 
 
@@ -468,6 +535,8 @@ def inicializar_dados_externos() -> dict[str, bool]:
         else:
             n = dados_geograficos.carregar_de_csv(path)
         status["dados_geograficos"] = n > 0
+    elif OPENTOPOGRAPHY_API_KEY:
+        status["dados_geograficos"] = True
     else:
         status["dados_geograficos"] = False
 

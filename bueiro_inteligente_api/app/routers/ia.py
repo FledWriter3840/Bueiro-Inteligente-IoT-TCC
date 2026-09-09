@@ -150,6 +150,31 @@ def obter_clima_atual():
     )
 
 
+@router.get("/topografia-atual")
+def obter_topografia_atual(
+    lat: float = BUEIRO_LATITUDE,
+    lon: float = BUEIRO_LONGITUDE,
+):
+    """
+    Consulta os dados topográficos atuais via OpenTopography (Copernicus DEM GLO-30)
+    ou provider local configurado. Retorna altitude, declividade, classificação de risco
+    e detecção de fundo de vale.
+    """
+    from ..topography_service import topografia_service
+    perfil = topografia_service.obter_perfil_completo(lat=lat, lon=lon)
+    return {
+        "latitude": lat,
+        "longitude": lon,
+        "altitude_metros": perfil.altitude_metros,
+        "eh_fundo_de_vale": perfil.eh_fundo_de_vale,
+        "classificacao_risco": perfil.classificacao_risco,
+        "declividade_pct": perfil.declividade_pct,
+        "dataset_origem": perfil.dataset_origem,
+        "disponivel": perfil.disponivel,
+        "detalhes_analise": perfil.detalhes_analise,
+    }
+
+
 @router.get("/fontes-dados")
 def listar_fontes_dados():
     """
@@ -174,14 +199,14 @@ def listar_fontes_dados():
                 "descricao": "Features derivadas do horário: estação do ano, horário de pico, feriados SP.",
             },
             {
-                "nome": "Histórico de Alagamentos (CGE SP)",
+                "nome": "Histórico de Alagamentos (CGE SP / ARTESP)",
                 "status": "Ativo" if historico_alagamentos.disponivel else "Esqueleto (aguardando dataset)",
-                "descricao": "Pontos recorrentes de alagamento e manchas de inundação.",
+                "descricao": "Pontos recorrentes de alagamento, erosão e manchas de inundação.",
             },
             {
-                "nome": "Dados Geográficos (GeoSampa)",
-                "status": "Ativo" if dados_geograficos.disponivel else "Esqueleto (aguardando dataset)",
-                "descricao": "Altitude relativa, fundo de vale, classificação de áreas de risco.",
+                "nome": "Topografia / Relevo (Copernicus DEM GLO-30)",
+                "status": "Ativo" if dados_geograficos.disponivel else "Indisponível (configurar OPENTOPOGRAPHY_API_KEY)",
+                "descricao": "Altitude precisa, fundo de vale e declividade via Copernicus DEM 30m.",
             },
             {
                 "nome": "Uso do Solo (Entorno)",

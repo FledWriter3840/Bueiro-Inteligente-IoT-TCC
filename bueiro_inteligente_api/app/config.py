@@ -15,6 +15,12 @@ OPENWEATHER_API_KEY: str = os.getenv("OPENWEATHER_API_KEY", "")
 OPENWEATHER_CACHE_TTL_SEGUNDOS: int = int(os.getenv("OPENWEATHER_CACHE_TTL", "600"))
 
 # ─────────────────────────────────────────────────────────────────
+# OpenTopography (Copernicus DEM GLO-30)
+# ─────────────────────────────────────────────────────────────────
+OPENTOPOGRAPHY_API_KEY: str = os.getenv("OPENTOPOGRAPHY_API_KEY", "")
+OPENTOPOGRAPHY_DATASET: str = os.getenv("OPENTOPOGRAPHY_DATASET", "COP30")
+
+# ─────────────────────────────────────────────────────────────────
 # Localização padrão do bueiro (São Paulo, SP)
 # ─────────────────────────────────────────────────────────────────
 BUEIRO_LATITUDE: float = float(os.getenv("BUEIRO_LATITUDE", "-23.5505"))

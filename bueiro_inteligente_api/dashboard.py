@@ -47,6 +47,36 @@ with col_auto:
     if auto:
         st.markdown('<meta http-equiv="refresh" content="10">', unsafe_allow_html=True)
 
+# ---------------------------------------------------------------
+# Barra lateral: Telemetria Externa (Clima & Topografia ao vivo)
+# ---------------------------------------------------------------
+with st.sidebar:
+    st.header("🌍 Telemetria Externa")
+    st.caption("Dados ambientais em tempo real (OpenWeatherMap & Copernicus DEM)")
+
+    clima_side = get_json("/ia/clima-atual")
+    if clima_side and clima_side.get("disponivel"):
+        st.subheader("🌤️ Clima Atual")
+        st.write(f"**Condição:** {clima_side.get('descricao_clima')}")
+        st.write(f"**Temperatura:** {clima_side.get('temperatura_c')} °C")
+        st.write(f"**Umidade:** {clima_side.get('umidade_pct')}%")
+        st.write(f"**Chuva acumulada:** {clima_side.get('chuva_mm_h')} mm/h")
+        st.write(f"**Previsão 3h:** {clima_side.get('previsao_chuva_proximas_3h_mm')} mm")
+    else:
+        st.caption("🌤️ Clima: Fallback ativo")
+
+    st.divider()
+    topo_side = get_json("/ia/topografia-atual")
+    if topo_side and topo_side.get("disponivel"):
+        st.subheader("⛰️ Topografia (COP30)")
+        st.write(f"**Cota Altimétrica:** {topo_side.get('altitude_metros')} m")
+        fundo_label = "Sim ⚠️ (Depressão)" if topo_side.get("eh_fundo_de_vale") else "Não"
+        st.write(f"**Fundo de Vale:** {fundo_label}")
+        st.write(f"**Declividade:** {topo_side.get('declividade_pct')}%")
+        st.write(f"**Risco Topográfico:** {topo_side.get('classificacao_risco')}")
+    else:
+        st.caption("⛰️ Topografia: Cota padrão")
+
 tab_geral, tab_leituras, tab_eventos, tab_ia, tab_simulacao, tab_manual = st.tabs(
     ["Visão Geral", "Leituras", "Alertas & Eventos", "IA & Previsão", "Simulação", "Inserir Dados"]
 )
@@ -222,6 +252,24 @@ with tab_ia:
         st.write(f"**Total de fontes ativas:** {fontes_info.get('total_ativas', 0)} de {fontes_info.get('total_fontes', 6)}")
         df_fontes = pd.DataFrame(fontes_info.get("fontes", []))
         st.dataframe(df_fontes, use_container_width=True, hide_index=True)
+
+    col_clima, col_topo = st.columns(2)
+    with col_clima:
+        clima_info = get_json("/ia/clima-atual")
+        if clima_info and clima_info.get("disponivel"):
+            st.markdown(f"**🌤️ Clima em Tempo Real:** {clima_info.get('descricao_clima')} ({clima_info.get('temperatura_c')}°C)")
+            st.caption(f"Chuva: {clima_info.get('chuva_mm_h')} mm/h | Umidade: {clima_info.get('umidade_pct')}% | Vento: {clima_info.get('vento_ms')} m/s | Previsão 3h: {clima_info.get('previsao_chuva_proximas_3h_mm')} mm")
+        else:
+            st.caption("🌤️ Clima: Fallback sazonal ativo (configure OPENWEATHER_API_KEY).")
+
+    with col_topo:
+        topo_info = get_json("/ia/topografia-atual")
+        if topo_info and topo_info.get("disponivel"):
+            fundo_txt = "Sim (Depressão/Convergência)" if topo_info.get("eh_fundo_de_vale") else "Não"
+            st.markdown(f"**⛰️ Topografia (Copernicus DEM):** Cota {topo_info.get('altitude_metros')}m")
+            st.caption(f"Fundo de Vale: {fundo_txt} | Declividade: {topo_info.get('declividade_pct')}% | Risco: {topo_info.get('classificacao_risco')}")
+        else:
+            st.caption("⛰️ Topografia: Cota padrão (configure OPENTOPOGRAPHY_API_KEY no .env para ativar).")
 
     st.divider()
     st.subheader("Treinar/retreinar o modelo de Machine Learning")

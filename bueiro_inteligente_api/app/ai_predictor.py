@@ -252,6 +252,18 @@ class PrevisorEntupimentoIA:
                     db.add(novo_alerta)
                     alerta_gerado = True
 
+            # Registra ciclo de limpeza e compactação automática se for Urgente/Emergência
+            if urgencia_limpeza in ["Urgente", "Emergência"]:
+                cinco_minutos_atras = agora - timedelta(minutes=5)
+                limpeza_recente = db.query(models.Limpeza)\
+                                    .filter(models.Limpeza.data_hora >= cinco_minutos_atras)\
+                                    .first()
+                if not limpeza_recente:
+                    # Limite de VARCHAR(20) no MySQL
+                    status_auto = "Auto (Emergência)" if urgencia_limpeza == "Emergência" else "Auto (Urgente)"
+                    nova_limpeza = models.Limpeza(status_limpeza=status_auto)
+                    db.add(nova_limpeza)
+
             db.commit()
 
         # ═══════════════════════════════════════════════════════════
@@ -571,29 +583,29 @@ def _classificar_risco(
     probabilidade: float,
     distancia_atual: float,
 ) -> tuple[str, str]:
-    """Classifica o nível de risco e gera a recomendação textual."""
+    """Classifica o nível de risco e gera a recomendação operacional do bueiro."""
     if probabilidade >= 0.80 or distancia_atual <= 15.0:
         return (
             "Crítico",
-            "ACIONAR EQUIPE DE EMERGÊNCIA IMEDIATAMENTE. "
-            "Risco iminente de transbordo e alagamento na via pública.",
+            "ACIONAR CICLO DE LIMPEZA E COMPACTADOR IMEDIATAMENTE! "
+            "Risco iminente de transbordo pluvial. Ejetar resíduos para o compartimento coletor e iniciar esmagamento.",
         )
     elif probabilidade >= 0.60:
         return (
             "Alto",
-            "Aumento rápido de resíduos/água detectado por múltiplas fontes. "
-            "Abrir comportas e emitir alerta preventivo à Defesa Civil.",
+            "Nível elevado de detritos/água detectado. "
+            "Iniciar ciclo de transferência de resíduos e acionar compactador preventivamente.",
         )
     elif probabilidade >= 0.35:
         return (
             "Médio",
-            "Volume moderado detectado. Condições climáticas e históricas "
-            "indicam atenção redobrada. Manter monitoramento contínuo.",
+            "Volume moderado de água/resíduos em ascensão. "
+            "Manter sistema em prontidão para acionamento do mecanismo de limpeza e compactação.",
         )
     else:
         return (
             "Baixo",
-            "Bueiro operando em condições normais de drenagem pluvial.",
+            "Bueiro com fluxo desobstruído. Mecanismo de compactação em espera operacional.",
         )
 
 
@@ -608,82 +620,79 @@ def _recomendar_limpeza(
     nivel_residuo_pct: float,
 ) -> tuple[str, str, float | None]:
     """
-    Gera recomendação de limpeza baseada no score ponderado e contexto.
+    Gera diretriz operacional para o bueiro inteligente automatizado:
+    transfere os detritos para o recipiente coletor e executa a prensagem/compactação.
 
     Retorna: (urgencia, recomendacao_texto, proxima_limpeza_minutos)
     """
 
-    # ── EMERGÊNCIA: Risco iminente de transbordo ──────────────────
+    # ── EMERGÊNCIA: Transbordo iminente — acionar mecanismo agora ─
     if probabilidade >= 0.80 or distancia_atual <= 15.0:
+        alerta_recipiente = " ATENÇÃO: Recipiente compactador em alta ocupação!" if nivel_residuo_pct >= 75.0 else ""
         return (
             "Emergência",
-            "LIMPEZA DE EMERGÊNCIA NECESSÁRIA! O bueiro está próximo do "
-            "transbordo. Acionar equipe imediatamente para desobstrução e "
-            "abertura de comportas. Risco de alagamento na via.",
+            f"ACIONAR LIMPEZA MECÂNICA IMEDIATA! Comandar transferência urgente dos resíduos para a câmara coletora "
+            f"e iniciar ciclo do compactador para liberar a vazão da grade.{alerta_recipiente}",
             0.0,  # Agora!
         )
 
-    # ── URGENTE: Risco alto com fatores agravantes ────────────────
+    # ── URGENTE: Detritos acumulando com fatores agravantes ────────
     if probabilidade >= 0.60:
         motivos = []
         if score_sensor >= 0.60:
-            motivos.append("nível de preenchimento alto")
+            motivos.append("acúmulo de sólidos no cesto")
         if score_clima >= 0.60:
-            motivos.append("condições climáticas adversas")
+            motivos.append("chuva forte prevista")
         if taxa_subida_cm_min > 10.0:
-            motivos.append(f"taxa de subida acelerada ({taxa_subida_cm_min:.1f} cm/min)")
+            motivos.append(f"subida rápida ({taxa_subida_cm_min:.1f} cm/min)")
 
-        detalhes = ", ".join(motivos) if motivos else "múltiplos indicadores elevados"
+        detalhes = ", ".join(motivos) if motivos else "indicadores de saturação elevados"
         return (
             "Urgente",
-            f"Antecipar limpeza com urgência: {detalhes}. "
-            f"Recomendado despachar equipe dentro de 30 minutos.",
+            f"Disparar ciclo de limpeza antecipada ({detalhes}): "
+            f"transferir resíduos e acionar compactador em até 30 minutos.",
             30.0,
         )
 
-    # ── PREVENTIVA: Risco moderado — antecipar limpeza ────────────
+    # ── PREVENTIVA: Risco moderado — esvaziar antes da chuva ───────
     if probabilidade >= 0.35:
         motivos = []
         tempo_sugerido = 120.0  # 2 horas
 
         if dados_clima.disponivel and dados_clima.previsao_chuva_proximas_3h_mm >= 10.0:
             motivos.append(
-                f"previsão de {dados_clima.previsao_chuva_proximas_3h_mm:.0f}mm "
-                f"de chuva nas próximas 3h"
+                f"previsão de {dados_clima.previsao_chuva_proximas_3h_mm:.0f}mm de chuva em 3h"
             )
-            tempo_sugerido = 60.0  # 1 hora se chuva forte vindo
+            tempo_sugerido = 60.0
 
         if dados_tempo.periodo_chuvoso:
-            motivos.append("período chuvoso ativo (outubro-março)")
+            motivos.append("período chuvoso ativo")
 
         if nivel_residuo_pct >= 50.0:
-            motivos.append(f"nível de resíduo em {nivel_residuo_pct:.0f}%")
+            motivos.append(f"recipiente compactador já em {nivel_residuo_pct:.0f}%")
             tempo_sugerido = min(tempo_sugerido, 90.0)
 
         if score_sensor >= 0.40:
-            motivos.append("nível de preenchimento moderado")
+            motivos.append("resíduos detectados no bueiro")
 
-        detalhes = ". ".join(motivos) if motivos else "Indicadores moderados detectados"
+        detalhes = ". ".join(motivos) if motivos else "condições ambientais desfavoráveis"
         return (
             "Preventiva",
-            f"Agendar limpeza preventiva: {detalhes}. "
-            f"Sugestão: realizar limpeza em até {int(tempo_sugerido)} minutos.",
+            f"Agendar ciclo de limpeza e compactação preventiva ({detalhes}). "
+            f"Executar ciclo em até {int(tempo_sugerido)} minutos para liberar a capacidade de recepção do bueiro.",
             tempo_sugerido,
         )
 
-    # ── ROTINA: Sem risco significativo ───────────────────────────
+    # ── ROTINA: Operação estável ──────────────────────────────────
     observacoes = []
+    if nivel_residuo_pct >= 60.0:
+        observacoes.append(f"Câmara de resíduos compactados em {nivel_residuo_pct:.0f}%. Programar coleta.")
     if dados_tempo.periodo_chuvoso:
-        observacoes.append("Atenção: período chuvoso — manter frequência de inspeção elevada.")
-    if dados_clima.disponivel and dados_clima.previsao_chuva_proximas_3h_mm >= 5.0:
-        observacoes.append(
-            f"Nota: previsão de {dados_clima.previsao_chuva_proximas_3h_mm:.0f}mm "
-            f"de chuva nas próximas 3h."
-        )
+        observacoes.append("Período chuvoso — manter compactador em modo de prontidão.")
 
     obs_texto = " ".join(observacoes) if observacoes else ""
     return (
         "Rotina",
-        f"Manter rotina normal de limpeza. Bueiro em boas condições. {obs_texto}".strip(),
+        f"Manter ciclo normal de monitoramento. Bueiro desobstruído e operando adequadamente. {obs_texto}".strip(),
         None,
     )
