@@ -48,13 +48,49 @@ with col_auto:
         st.markdown('<meta http-equiv="refresh" content="10">', unsafe_allow_html=True)
 
 # ---------------------------------------------------------------
-# Barra lateral: Telemetria Externa (Clima & Topografia ao vivo)
+# Barra lateral: Localização + Telemetria Externa
 # ---------------------------------------------------------------
 with st.sidebar:
+    # ── Seletor de Localização ──────────────────────────────────
+    st.header("📍 Localização do Bueiro")
+    st.caption("Coordenadas usadas pela IA, clima e topografia")
+
+    PRESETS_LOCALIZACAO = {
+        "São Paulo - Centro (padrão)": (-23.5505, -46.6333),
+        "São Paulo - Marginal Tietê":  (-23.5230, -46.6820),
+        "São Paulo - Marginal Pinheiros": (-23.5870, -46.6920),
+        "São Paulo - Ipiranga":        (-23.5900, -46.6100),
+        "Rio de Janeiro - Centro":     (-22.9068, -43.1729),
+        "Curitiba - Centro":           (-25.4284, -49.2733),
+        "Personalizado":               (None, None),
+    }
+
+    preset_escolhido = st.selectbox(
+        "Local predefinido",
+        list(PRESETS_LOCALIZACAO.keys()),
+        key="preset_local",
+    )
+
+    preset_lat, preset_lon = PRESETS_LOCALIZACAO[preset_escolhido]
+
+    if preset_escolhido == "Personalizado":
+        user_lat = st.number_input("Latitude",  value=-23.5505, format="%.4f", key="lat_input")
+        user_lon = st.number_input("Longitude", value=-46.6333, format="%.4f", key="lon_input")
+    else:
+        user_lat = preset_lat
+        user_lon = preset_lon
+        st.write(f"**Lat:** `{user_lat}` | **Lon:** `{user_lon}`")
+
+    # Parâmetros globais de localização para todas as chamadas
+    loc_params = {"lat": user_lat, "lon": user_lon}
+
+    st.divider()
+
+    # ── Telemetria Externa ──────────────────────────────────────
     st.header("🌍 Telemetria Externa")
     st.caption("Dados ambientais em tempo real (OpenWeatherMap & Copernicus DEM)")
 
-    clima_side = get_json("/ia/clima-atual")
+    clima_side = get_json("/ia/clima-atual", params=loc_params)
     if clima_side and clima_side.get("disponivel"):
         st.subheader("🌤️ Clima Atual")
         st.write(f"**Condição:** {clima_side.get('descricao_clima')}")
@@ -66,7 +102,7 @@ with st.sidebar:
         st.caption("🌤️ Clima: Fallback ativo")
 
     st.divider()
-    topo_side = get_json("/ia/topografia-atual")
+    topo_side = get_json("/ia/topografia-atual", params=loc_params)
     if topo_side and topo_side.get("disponivel"):
         st.subheader("⛰️ Topografia (COP30)")
         st.write(f"**Cota Altimétrica:** {topo_side.get('altitude_metros')} m")
@@ -88,7 +124,7 @@ tab_geral, tab_leituras, tab_eventos, tab_ia, tab_simulacao, tab_manual = st.tab
 with tab_geral:
     leituras = get_json("/sensores/leituras") or []
     alertas = get_json("/alertas/") or []
-    previsao = get_json("/ia/previsao", params={"id_sensor": 1})
+    previsao = get_json("/ia/previsao", params={"id_sensor": 1, **loc_params})
 
     col1, col2, col3, col4, col5 = st.columns(5)
 
@@ -193,10 +229,10 @@ with tab_eventos:
 # ---------------------------------------------------------------
 with tab_ia:
     st.subheader("Comparativo entre os motores de IA")
-    st.caption("Motor 1: regressão/tendência temporal + sistema probabilístico. Motor 2: Machine Learning (scikit-learn, treinado com dataset sintético).")
+    st.caption("Motor 1: Multivariado (6 Fontes). Motor 2: Machine Learning.")
 
     if st.button("🧠 Rodar comparativo agora"):
-        comparativo = get_json("/ia/comparativo", params={"id_sensor": 1})
+        comparativo = get_json("/ia/comparativo", params={"id_sensor": 1, **loc_params})
         if comparativo:
             col1, col2 = st.columns(2)
 
@@ -255,7 +291,7 @@ with tab_ia:
 
     col_clima, col_topo = st.columns(2)
     with col_clima:
-        clima_info = get_json("/ia/clima-atual")
+        clima_info = get_json("/ia/clima-atual", params=loc_params)
         if clima_info and clima_info.get("disponivel"):
             st.markdown(f"**🌤️ Clima em Tempo Real:** {clima_info.get('descricao_clima')} ({clima_info.get('temperatura_c')}°C)")
             st.caption(f"Chuva: {clima_info.get('chuva_mm_h')} mm/h | Umidade: {clima_info.get('umidade_pct')}% | Vento: {clima_info.get('vento_ms')} m/s | Previsão 3h: {clima_info.get('previsao_chuva_proximas_3h_mm')} mm")
@@ -263,7 +299,7 @@ with tab_ia:
             st.caption("🌤️ Clima: Fallback sazonal ativo (configure OPENWEATHER_API_KEY).")
 
     with col_topo:
-        topo_info = get_json("/ia/topografia-atual")
+        topo_info = get_json("/ia/topografia-atual", params=loc_params)
         if topo_info and topo_info.get("disponivel"):
             fundo_txt = "Sim (Depressão/Convergência)" if topo_info.get("eh_fundo_de_vale") else "Não"
             st.markdown(f"**⛰️ Topografia (Copernicus DEM):** Cota {topo_info.get('altitude_metros')}m")
