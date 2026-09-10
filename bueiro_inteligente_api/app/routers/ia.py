@@ -16,14 +16,21 @@ router = APIRouter(
 )
 
 @router.get("/previsao", response_model=schemas.AnaliseIAResult)
-def obter_previsao_atual(id_sensor: int = 1, db: Session = Depends(get_db)):
+def obter_previsao_atual(
+    id_sensor: int = 1,
+    lat: float = BUEIRO_LATITUDE,
+    lon: float = BUEIRO_LONGITUDE,
+    db: Session = Depends(get_db),
+):
     """
     Executa o motor de IA multivariado sobre as leituras recentes do sensor
     e todas as fontes de dados disponíveis (clima, temporal, geográfico, etc.).
     Retorna o diagnóstico de risco de alagamento e recomendação de limpeza.
     (Atende ao requisito RF15 / UC09).
     """
-    return PrevisorEntupimentoIA.analisar_e_prever(db=db, id_sensor=id_sensor, persistir=True)
+    return PrevisorEntupimentoIA.analisar_e_prever(
+        db=db, id_sensor=id_sensor, persistir=True, lat=lat, lon=lon,
+    )
 
 @router.get("/historico-previsoes", response_model=list[schemas.PrevisaoEntupimentoOut])
 def listar_historico_previsoes(db: Session = Depends(get_db)):
@@ -80,7 +87,13 @@ def simular_cenario_chuva(cenario: schemas.CenarioSimulacaoRequest):
 
 
 @router.get("/previsao-ml", response_model=schemas.AnaliseIAMLResult)
-def obter_previsao_ml(id_sensor: int = 1, persistir: bool = False, db: Session = Depends(get_db)):
+def obter_previsao_ml(
+    id_sensor: int = 1,
+    persistir: bool = False,
+    lat: float = BUEIRO_LATITUDE,
+    lon: float = BUEIRO_LONGITUDE,
+    db: Session = Depends(get_db),
+):
     """
     Previsão via Machine Learning (scikit-learn, DecisionTreeClassifier),
     treinado sobre dataset sintético — complementar ao /ia/previsao
@@ -97,7 +110,13 @@ def treinar_modelo_ml(n_amostras: int = 3000):
     return treinar_modelo_ml_fn(n_amostras=n_amostras)
 
 @router.get("/comparativo", response_model=schemas.ComparativoIAResult)
-def comparar_motores_ia(id_sensor: int = 1, persistir: bool = False, db: Session = Depends(get_db)):
+def comparar_motores_ia(
+    id_sensor: int = 1,
+    persistir: bool = False,
+    lat: float = BUEIRO_LATITUDE,
+    lon: float = BUEIRO_LONGITUDE,
+    db: Session = Depends(get_db),
+):
     """
     Executa os dois motores de previsão (regressão/tendência temporal e
     Machine Learning via scikit-learn) sobre as mesmas leituras recentes
@@ -105,7 +124,7 @@ def comparar_motores_ia(id_sensor: int = 1, persistir: bool = False, db: Session
     convergência entre eles. Pensado para demonstração na banca de TCC.
     """
     resultado_regressao = PrevisorEntupimentoIA.analisar_e_prever(
-        db=db, id_sensor=id_sensor, persistir=persistir
+        db=db, id_sensor=id_sensor, persistir=persistir, lat=lat, lon=lon,
     )
     resultado_ml = PrevisorEntupimentoML.prever(
         db=db, id_sensor=id_sensor, persistir=False
@@ -138,15 +157,18 @@ def comparar_motores_ia(id_sensor: int = 1, persistir: bool = False, db: Session
 # ═══════════════════════════════════════════════════════════════════
 
 @router.get("/clima-atual")
-def obter_clima_atual():
+def obter_clima_atual(
+    lat: float = BUEIRO_LATITUDE,
+    lon: float = BUEIRO_LONGITUDE,
+):
     """
     Consulta os dados climáticos atuais via OpenWeatherMap.
     Retorna precipitação, umidade, vento, previsão de chuva e descrição.
     Requer OPENWEATHER_API_KEY configurada no .env.
     """
     return obter_dados_climaticos_dict(
-        lat=BUEIRO_LATITUDE,
-        lon=BUEIRO_LONGITUDE,
+        lat=lat,
+        lon=lon,
     )
 
 
