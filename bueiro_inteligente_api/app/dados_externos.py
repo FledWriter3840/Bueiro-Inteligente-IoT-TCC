@@ -18,15 +18,20 @@ import csv
 import json
 import math
 import logging
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
+
+import requests
 
 from .config import (
     DADOS_ALAGAMENTOS_PATH,
     DADOS_GEOGRAFICOS_PATH,
     DADOS_USO_SOLO_PATH,
     OPENTOPOGRAPHY_API_KEY,
+    OVERPASS_API_URL,
+    OVERPASS_RAIO_METROS,
 )
 
 logger = logging.getLogger(__name__)
@@ -430,6 +435,7 @@ class UsoDeSoloProvider:
     def __init__(self):
         self._perfil: PerfilUsoSolo = PerfilUsoSolo()
         self._carregado: bool = False
+        self._cache_api: dict[str, tuple[float, PerfilUsoSolo]] = {}
 
     @property
     def disponivel(self) -> bool:
@@ -480,9 +486,124 @@ class UsoDeSoloProvider:
         )
         self._carregado = True
 
-    def obter_perfil(self) -> PerfilUsoSolo:
-        """Retorna o perfil de uso do solo. Default conservador se não carregado."""
+    def obter_perfil(
+        self,
+        lat: float | None = None,
+        lon: float | None = None,
+        raio_metros: int = OVERPASS_RAIO_METROS,
+    ) -> PerfilUsoSolo:
+        """Obtém o perfil via OpenStreetMap e usa o perfil local como fallback."""
+        if lat is not None and lon is not None:
+            perfil_api = self._obter_perfil_overpass(lat, lon, raio_metros)
+            if perfil_api is not None:
+                return perfil_api
+
         return self._perfil
+
+    def _obter_perfil_overpass(
+        self,
+        lat: float,
+        lon: float,
+        raio_metros: int,
+    ) -> PerfilUsoSolo | None:
+        """Consulta elementos do entorno e converte-os para o contrato do preditor."""
+        chave = f"{lat:.5f}:{lon:.5f}:{raio_metros}"
+        cacheado = self._cache_api.get(chave)
+        if cacheado and time.time() - cacheado[0] < 600:
+            return cacheado[1]
+
+        consulta = f"""
+[out:json][timeout:15];
+(
+  nwr(around:{raio_metros},{lat},{lon})["amenity"="marketplace"];
+  nwr(around:{raio_metros},{lat},{lon})["shop"];
+  nwr(around:{raio_metros},{lat},{lon})["landuse"~"commercial|retail|industrial|residential"];
+  nwr(around:{raio_metros},{lat},{lon})["leisure"="park"];
+  way(around:{raio_metros},{lat},{lon})["highway"];
+);
+out center tags;
+"""
+
+        try:
+            resposta = requests.post(
+                OVERPASS_API_URL,
+                data=consulta,
+                headers={"User-Agent": "BueiroInteligenteTCC/1.0"},
+                timeout=20,
+            )
+            resposta.raise_for_status()
+            elementos = resposta.json().get("elements", [])
+        except Exception as exc:
+            logger.warning("Falha na consulta de uso do solo via Overpass: %s", exc)
+            return None
+
+        mercados: list[float] = []
+        parques: list[float] = []
+        tipos: list[str] = []
+        comerciais = 0
+        industriais = 0
+        rodovias = 0
+
+        for elemento in elementos:
+            tags = elemento.get("tags", {})
+            ponto = elemento.get("center", elemento)
+            item_lat = ponto.get("lat")
+            item_lon = ponto.get("lon")
+            if item_lat is None or item_lon is None:
+                continue
+            distancia = _haversine_metros(lat, lon, float(item_lat), float(item_lon))
+
+            landuse = tags.get("landuse", "")
+            amenity = tags.get("amenity", "")
+            leisure = tags.get("leisure", "")
+            highway = tags.get("highway", "")
+            shop = tags.get("shop", "")
+
+            if amenity == "marketplace" or shop:
+                mercados.append(distancia)
+            if leisure == "park":
+                parques.append(distancia)
+            if landuse in ("commercial", "retail") or shop:
+                comerciais += 1
+            if landuse == "industrial":
+                industriais += 1
+            if highway:
+                rodovias += 1
+            if landuse in ("commercial", "retail"):
+                tipos.append("Comercial")
+            elif landuse == "industrial":
+                tipos.append("Industrial")
+            elif landuse == "residential":
+                tipos.append("Residencial")
+
+        if not elementos:
+            return None
+
+        if comerciais and industriais:
+            tipo_via = "Mista"
+        elif comerciais:
+            tipo_via = "Comercial"
+        elif industriais:
+            tipo_via = "Industrial"
+        elif "Residencial" in tipos:
+            tipo_via = "Residencial"
+        else:
+            tipo_via = "Não classificado"
+
+        impermeabilizacao = min(
+            0.95,
+            0.45 + min(0.25, rodovias / 20) + min(0.20, (comerciais + industriais) / 10),
+        )
+        perfil = PerfilUsoSolo(
+            tipo_via=tipo_via,
+            proximidade_feira_m=min(mercados) if mercados else None,
+            proximidade_parque_m=min(parques) if parques else None,
+            indice_impermeabilizacao=round(impermeabilizacao, 2),
+            zona_comercial_intensa=comerciais >= 5,
+            disponivel=True,
+        )
+        self._cache_api[chave] = (time.time(), perfil)
+        return perfil
 
 
 # ═══════════════════════════════════════════════════════════════════

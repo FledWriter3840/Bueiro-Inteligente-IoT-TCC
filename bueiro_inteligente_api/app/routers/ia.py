@@ -203,6 +203,12 @@ def listar_fontes_dados():
     Lista quais fontes de dados estão ativas/carregadas no sistema.
     Útil para diagnóstico e verificação da configuração.
     """
+    perfil_solo = uso_do_solo.obter_perfil(
+        lat=BUEIRO_LATITUDE,
+        lon=BUEIRO_LONGITUDE,
+    )
+    uso_solo_ativo = perfil_solo.disponivel
+
     return {
         "fontes": [
             {
@@ -232,7 +238,7 @@ def listar_fontes_dados():
             },
             {
                 "nome": "Uso do Solo (Entorno)",
-                "status": "Ativo" if uso_do_solo.disponivel else "Esqueleto (aguardando dataset)",
+                "status": "Ativo" if uso_solo_ativo else "Indisponível (Overpass e dataset local)",
                 "descricao": "Tipo de via, proximidade com feiras/parques, impermeabilização.",
             },
         ],
@@ -242,7 +248,7 @@ def listar_fontes_dados():
             True,  # Temporal sempre ativo
             historico_alagamentos.disponivel,
             dados_geograficos.disponivel,
-            uso_do_solo.disponivel,
+            uso_solo_ativo,
         ]),
         "total_fontes": 6,
     }

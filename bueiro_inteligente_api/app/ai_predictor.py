@@ -121,7 +121,7 @@ class PrevisorEntupimentoIA:
         perfil_topo = dados_geograficos.obter_perfil_topografico(lat, lon)
 
         # ─── 6. Coleta de dados de uso do solo ─────────────────────
-        perfil_solo = uso_do_solo.obter_perfil()
+        perfil_solo = uso_do_solo.obter_perfil(lat=lat, lon=lon)
 
         # ═══════════════════════════════════════════════════════════
         # CÁLCULO DOS SCORES POR DIMENSÃO (cada um de 0.0 a 1.0)

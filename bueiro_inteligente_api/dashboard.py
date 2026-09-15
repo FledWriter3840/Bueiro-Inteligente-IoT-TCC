@@ -12,6 +12,17 @@ st.set_page_config(page_title="Bueiro Inteligente - Painel", page_icon="📉​"
 # ---------------------------------------------------------------
 # Funções auxiliares de acesso à API
 # ---------------------------------------------------------------
+def formatar_datas_pt_br(df: pd.DataFrame) -> pd.DataFrame:
+    """Formata timestamps da API para o padrão brasileiro na apresentação."""
+    df = df.copy()
+    for coluna in ("data_hora", "data_analise"):
+        if coluna in df.columns:
+            df[coluna] = pd.to_datetime(df[coluna], errors="coerce").dt.strftime(
+                "%d/%m/%Y %H:%M:%S"
+            )
+    return df
+
+
 def get_json(endpoint: str, params: dict | None = None):
     try:
         resp = requests.get(f"{API_URL}{endpoint}", params=params, timeout=5)
@@ -167,6 +178,7 @@ with tab_geral:
             title="Distância medida pelo sensor ao longo do tempo",
             labels={"valor_leitura": "Distância (cm)", "data_hora": "Data/Hora"}
         )
+        fig.update_xaxes(tickformat="%d/%m/%Y %H:%M")
         fig.add_hline(y=15, line_dash="dash", line_color="red",
                        annotation_text="Limite crítico (15cm)")
         st.plotly_chart(fig, use_container_width=True)
@@ -182,7 +194,7 @@ with tab_leituras:
     leituras = get_json("/sensores/leituras") or []
     if leituras:
         df = pd.DataFrame(leituras)
-        st.dataframe(df, use_container_width=True, hide_index=True)
+        st.dataframe(formatar_datas_pt_br(df), use_container_width=True, hide_index=True)
     else:
         st.info("Nenhuma leitura registrada ainda.")
 
@@ -197,14 +209,14 @@ with tab_eventos:
         st.subheader("🚨 Alertas")
         alertas = get_json("/alertas/") or []
         if alertas:
-            st.dataframe(pd.DataFrame(alertas), use_container_width=True, hide_index=True)
+            st.dataframe(formatar_datas_pt_br(pd.DataFrame(alertas)), use_container_width=True, hide_index=True)
         else:
             st.info("Nenhum alerta registrado.")
 
         st.subheader("🧹 Limpeza")
         limpezas = get_json("/limpeza/") or []
         if limpezas:
-            st.dataframe(pd.DataFrame(limpezas), use_container_width=True, hide_index=True)
+            st.dataframe(formatar_datas_pt_br(pd.DataFrame(limpezas)), use_container_width=True, hide_index=True)
         else:
             st.info("Nenhuma limpeza registrada.")
 
@@ -212,14 +224,14 @@ with tab_eventos:
         st.subheader("🗜️ Compactação")
         compactacoes = get_json("/compactacao/") or []
         if compactacoes:
-            st.dataframe(pd.DataFrame(compactacoes), use_container_width=True, hide_index=True)
+            st.dataframe(formatar_datas_pt_br(pd.DataFrame(compactacoes)), use_container_width=True, hide_index=True)
         else:
             st.info("Nenhuma compactação registrada.")
 
         st.subheader("📜 Histórico do sistema")
         historico = get_json("/historico/") or []
         if historico:
-            st.dataframe(pd.DataFrame(historico), use_container_width=True, hide_index=True)
+            st.dataframe(formatar_datas_pt_br(pd.DataFrame(historico)), use_container_width=True, hide_index=True)
         else:
             st.info("Nenhum evento registrado.")
 
@@ -392,7 +404,7 @@ with tab_manual:
         st.markdown("#### Novo alerta manual")
         leituras_disponiveis = get_json("/sensores/leituras") or []
         if leituras_disponiveis:
-            opcoes = {f"#{l['id_leitura']} — {l['valor_leitura']}{l['unidade_medida']} ({l['data_hora']})": l['id_leitura']
+            opcoes = {f"#{l['id_leitura']} — {l['valor_leitura']}{l['unidade_medida']} ({pd.to_datetime(l['data_hora']).strftime('%d/%m/%Y %H:%M:%S')})": l['id_leitura']
                       for l in leituras_disponiveis[:20]}
             escolha = st.selectbox("Leitura associada", list(opcoes.keys()))
             descricao = st.text_input("Descrição do alerta", value="Alerta manual de teste")

@@ -33,6 +33,13 @@ DADOS_ALAGAMENTOS_PATH: str = os.getenv("DADOS_ALAGAMENTOS_PATH", "")
 DADOS_GEOGRAFICOS_PATH: str = os.getenv("DADOS_GEOGRAFICOS_PATH", "")
 DADOS_USO_SOLO_PATH: str = os.getenv("DADOS_USO_SOLO_PATH", "")
 
+# OpenStreetMap / Overpass para dados do entorno
+OVERPASS_API_URL: str = os.getenv(
+	"OVERPASS_API_URL",
+	"https://overpass-api.de/api/interpreter",
+)
+OVERPASS_RAIO_METROS: int = int(os.getenv("OVERPASS_RAIO_METROS", "500"))
+
 # ─────────────────────────────────────────────────────────────────
 # Pesos do scoring ponderado (somam 1.0)
 # ─────────────────────────────────────────────────────────────────
