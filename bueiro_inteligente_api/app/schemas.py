@@ -9,6 +9,13 @@ class LeituraSensorCreate(BaseModel):
 class LeituraSensorOut(LeituraSensorCreate):
     id_leitura: int
     data_hora: datetime
+    acionar_limpeza: bool = False
+    tempo_limpeza_segundos: int = 0
+    motivo_limpeza: str = ""
+    nivel_risco: str = "Baixo"
+    nivel_risco_multivariado: str = "Baixo"
+    nivel_risco_ml: str = "Baixo"
+    modelo_decisao: str = "Multivariada + Machine Learning"
     class Config:
         from_attributes = True
 

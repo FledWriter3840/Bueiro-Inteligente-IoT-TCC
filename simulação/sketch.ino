@@ -16,6 +16,19 @@ const int ledVermelho = 26;
 
 Servo servoMotor;
 
+bool comandoLimpezaNaResposta(const String& resposta) {
+  return resposta.indexOf("\"acionar_limpeza\":true") >= 0 ||
+         resposta.indexOf("\"acionar_limpeza\": true") >= 0;
+}
+
+int duracaoLimpezaNaResposta(const String& resposta) {
+  int inicio = resposta.indexOf("\"tempo_limpeza_segundos\":");
+  if (inicio < 0) inicio = resposta.indexOf("\"tempo_limpeza_segundos\": ");
+  if (inicio < 0) return 0;
+  inicio = resposta.indexOf(":", inicio) + 1;
+  return resposta.substring(inicio).toInt();
+}
+
 void setup() {
   Serial.begin(115200);
   Serial.println("\n--- Iniciando Bueiro Inteligente IoT ---");
@@ -73,6 +86,19 @@ void enviarLeituraParaAPI(float valor) {
         String payload = http.getString();
         Serial.print(">> Resposta API: ");
         Serial.println(payload);
+        int duracao = duracaoLimpezaNaResposta(payload);
+        if (comandoLimpezaNaResposta(payload) && duracao > 0) {
+          Serial.print("[IA] Iniciando ciclo proporcional de ");
+          Serial.print(duracao);
+          Serial.println(" segundos.");
+          digitalWrite(ledVerde, LOW);
+          digitalWrite(ledVermelho, HIGH);
+          servoMotor.write(90);
+          delay(duracao * 1000);
+          servoMotor.write(0);
+          digitalWrite(ledVermelho, LOW);
+          digitalWrite(ledVerde, HIGH);
+        }
       } else {
         Serial.print(">> Erro HTTP: ");
         Serial.println(http.errorToString(httpCode));
