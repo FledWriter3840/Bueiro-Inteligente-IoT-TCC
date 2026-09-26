@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import requests
-from datetime import datetime
+from datetime import date, datetime
 
 API_URL = "http://localhost:8000"
 
@@ -43,6 +43,36 @@ def post_json(endpoint: str, payload: dict | None = None, params: dict | None = 
         return None
 
 
+def calcular_indice_constancia_limpeza(limpezas: list[dict], janela_dias: int = 180):
+    """Mede a regularidade dos intervalos entre registros de limpeza na janela."""
+    datas = pd.to_datetime(
+        pd.Series([limpeza.get("data_hora") for limpeza in limpezas]),
+        errors="coerce",
+        utc=True,
+    ).dropna().drop_duplicates().sort_values()
+    limite = pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=janela_dias)
+    datas = datas[datas >= limite]
+    if len(datas) < 3:
+        return None, len(datas)
+
+    intervalos = datas.diff().dropna().dt.total_seconds() / 86400
+    media = intervalos.mean()
+    if media <= 0:
+        return None, len(datas)
+
+    coeficiente_variacao = intervalos.std(ddof=1) / media
+    indice = 100 / (1 + coeficiente_variacao)
+    return float(indice), len(datas)
+
+
+CORES_RISCO = {
+    "Baixo": "#2e8b57",
+    "Médio": "#d6a500",
+    "Alto": "#ed7d31",
+    "Crítico": "#c0392b",
+}
+
+
 # ---------------------------------------------------------------
 # Cabeçalho e controles
 # ---------------------------------------------------------------
@@ -76,21 +106,125 @@ with st.sidebar:
         "Personalizado":               (None, None),
     }
 
+    opcao_inventario = "Inventário rodoviário (bueiros.csv)"
     preset_escolhido = st.selectbox(
         "Local predefinido",
-        list(PRESETS_LOCALIZACAO.keys()),
+        [*PRESETS_LOCALIZACAO.keys(), opcao_inventario],
         key="preset_local",
     )
 
-    preset_lat, preset_lon = PRESETS_LOCALIZACAO[preset_escolhido]
-
-    if preset_escolhido == "Personalizado":
-        user_lat = st.number_input("Latitude",  value=-23.5505, format="%.4f", key="lat_input")
-        user_lon = st.number_input("Longitude", value=-46.6333, format="%.4f", key="lon_input")
+    bueiros_rota = []
+    bueiro_selecionado = None
+    ponto_selecionado = "Montante"
+    if preset_escolhido == opcao_inventario:
+        rodovias_disponiveis = get_json("/bueiros/rodovias") or []
+        if rodovias_disponiveis:
+            rodovia = st.selectbox("Rodovia do inventário", rodovias_disponiveis, key="bueiro_rodovia")
+            bueiros_rota = get_json("/bueiros/", params={"rodovia": rodovia}) or []
+        if bueiros_rota:
+            bueiro_selecionado = st.selectbox(
+                "Bueiro por quilômetro",
+                bueiros_rota,
+                format_func=lambda b: f"km {b['km']:.3f} | {b['regional']} | #{b['id']}",
+                key=f"bueiro_registro_{rodovia}",
+            )
+            ponto_selecionado = st.selectbox(
+                "Coordenada do bueiro",
+                ["Montante", "Jusante"],
+                key=f"bueiro_ponto_{bueiro_selecionado['id']}",
+            )
+            sufixo_ponto = ponto_selecionado.lower()
+            preset_lat = bueiro_selecionado[f"latitude_{sufixo_ponto}"]
+            preset_lon = bueiro_selecionado[f"longitude_{sufixo_ponto}"]
+        else:
+            preset_lat, preset_lon = -23.5505, -46.6333
+            st.warning("Não há bueiros com coordenadas válidas para essa rodovia.")
     else:
-        user_lat = preset_lat
-        user_lon = preset_lon
-        st.write(f"**Lat:** `{user_lat}` | **Lon:** `{user_lon}`")
+        preset_lat, preset_lon = PRESETS_LOCALIZACAO[preset_escolhido]
+
+    chave_localizacao = (
+        f"inventario_{bueiro_selecionado['id']}_{ponto_selecionado}"
+        if bueiro_selecionado
+        else preset_escolhido.replace(" ", "_")
+    )
+    if preset_escolhido == "Personalizado":
+        user_lat = st.number_input("Latitude", value=-23.5505, format="%.7f", key="lat_input")
+        user_lon = st.number_input("Longitude", value=-46.6333, format="%.7f", key="lon_input")
+    else:
+        user_lat = st.number_input(
+            "Latitude", value=float(preset_lat), format="%.7f", key=f"lat_{chave_localizacao}"
+        )
+        user_lon = st.number_input(
+            "Longitude", value=float(preset_lon), format="%.7f", key=f"lon_{chave_localizacao}"
+        )
+
+    if bueiro_selecionado:
+        st.caption(f"{bueiro_selecionado['rodovia']} · km {bueiro_selecionado['km']:.3f} · {ponto_selecionado}")
+
+    with st.expander("Adicionar novo bueiro", expanded=False):
+        mensagem_cadastro = st.session_state.pop("bueiro_cadastrado_msg", None)
+        if mensagem_cadastro:
+            st.success(mensagem_cadastro)
+
+        with st.form("form_novo_bueiro", clear_on_submit=False):
+            regional_nova = st.text_input("Regional", value="Cadastro manual", max_chars=80)
+            elemento_novo = st.selectbox(
+                "Elemento",
+                ["Bueiro", "Boca de lobo", "Poço de visita", "Outro"],
+            )
+            rodovia_nova = st.text_input(
+                "Rodovia ou logradouro",
+                value=bueiro_selecionado["rodovia"] if bueiro_selecionado else "",
+                max_chars=80,
+            )
+            km_novo = st.number_input("Quilômetro / referência", min_value=0.0, value=0.0, step=0.1)
+            levantamento_novo = st.date_input("Data do levantamento", value=date.today())
+            tipo_novo = st.text_input("Tipo / material", value="Boca de lobo", max_chars=160)
+            extensao_nova = st.number_input("Extensão (m)", min_value=0.0, value=0.0, step=0.5)
+            dimensao_nova = st.number_input("Dimensão (m)", min_value=0.0, value=0.0, step=0.1)
+            st.caption("Informe as coordenadas geográficas dos pontos de montante e jusante.")
+            latitude_montante_nova = st.number_input(
+                "Latitude de montante", min_value=-90.0, max_value=90.0,
+                value=float(user_lat), format="%.7f",
+            )
+            longitude_montante_nova = st.number_input(
+                "Longitude de montante", min_value=-180.0, max_value=180.0,
+                value=float(user_lon), format="%.7f",
+            )
+            latitude_jusante_nova = st.number_input(
+                "Latitude de jusante", min_value=-90.0, max_value=90.0,
+                value=float(user_lat), format="%.7f",
+            )
+            longitude_jusante_nova = st.number_input(
+                "Longitude de jusante", min_value=-180.0, max_value=180.0,
+                value=float(user_lon), format="%.7f",
+            )
+            salvar_bueiro = st.form_submit_button("Salvar novo bueiro")
+
+        if salvar_bueiro:
+            if not regional_nova.strip() or not rodovia_nova.strip() or not tipo_novo.strip():
+                st.error("Preencha Regional, Rodovia ou logradouro e Tipo / material.")
+            else:
+                resultado_cadastro = post_json("/bueiros/", payload={
+                    "regional": regional_nova.strip(),
+                    "elemento": elemento_novo,
+                    "rodovia": rodovia_nova.strip(),
+                    "levantamento": levantamento_novo.isoformat(),
+                    "km": km_novo,
+                    "extensao_m": extensao_nova or None,
+                    "dimensao_m": dimensao_nova or None,
+                    "tipo": tipo_novo.strip(),
+                    "latitude_montante": latitude_montante_nova,
+                    "longitude_montante": longitude_montante_nova,
+                    "latitude_jusante": latitude_jusante_nova,
+                    "longitude_jusante": longitude_jusante_nova,
+                })
+                if resultado_cadastro:
+                    st.session_state["bueiro_cadastrado_msg"] = (
+                        f"Bueiro cadastrado com identificador {resultado_cadastro['id']}. "
+                        "Ele já estará disponível no inventário."
+                    )
+                    st.rerun()
 
     # Parâmetros globais de localização para todas as chamadas
     loc_params = {"lat": user_lat, "lon": user_lon}
@@ -124,8 +258,8 @@ with st.sidebar:
     else:
         st.caption("⛰️ Topografia: Cota padrão")
 
-tab_geral, tab_leituras, tab_eventos, tab_ia, tab_simulacao, tab_manual = st.tabs(
-    ["Visão Geral", "Leituras", "Alertas & Eventos", "IA & Previsão", "Simulação", "Inserir Dados"]
+tab_geral, tab_leituras, tab_eventos, tab_ia, tab_simulacao, tab_manual, tab_mapa = st.tabs(
+    ["Visão Geral", "Leituras", "Alertas & Eventos", "IA & Previsão", "Simulação", "Inserir Dados", "Mapa de Bueiros"]
 )
 
 
@@ -167,6 +301,35 @@ with tab_geral:
         if rec_limp:
             st.info(f"🧹 **Diretriz de Limpeza:** {rec_limp}")
 
+        risco_atual = previsao.get("nivel_risco", "Baixo")
+        urgencia_atual = previsao.get("urgencia_limpeza", "Rotina")
+        risco_urgente = risco_atual == "Crítico" or urgencia_atual in ("Urgente", "Emergência")
+        risco_elevado = risco_atual == "Alto" or urgencia_atual == "Preventiva"
+        cor_previsao = (
+            "#c0392b" if risco_urgente else
+            "#ed7d31" if risco_elevado else
+            CORES_RISCO.get(risco_atual, "#2e8b57")
+        )
+        fig_risco = px.bar(
+            pd.DataFrame({
+                "Indicador": ["Probabilidade de entupimento"],
+                "Probabilidade": [previsao.get("probabilidade_entupimento", 0)],
+            }),
+            x="Indicador",
+            y="Probabilidade",
+            title="IA / Previsão — risco e necessidade de limpeza",
+        )
+        fig_risco.update_traces(
+            marker_color=cor_previsao,
+            hovertemplate=(
+                f"Risco: {risco_atual}<br>Limpeza: {urgencia_atual}"
+                "<br>Probabilidade: %{y:.0%}<extra></extra>"
+            ),
+        )
+        fig_risco.update_yaxes(range=[0, 1], tickformat=".0%", title="Probabilidade")
+        fig_risco.update_layout(showlegend=False, xaxis_title=None)
+        st.plotly_chart(fig_risco, use_container_width=True)
+
     st.divider()
 
     if leituras:
@@ -184,6 +347,26 @@ with tab_geral:
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.info("Nenhuma leitura registrada ainda.")
+
+    limpezas_indice = get_json("/limpeza/") or []
+    indice_constancia, registros_indice = calcular_indice_constancia_limpeza(limpezas_indice)
+    if indice_constancia is None:
+        valor_indice = "Dados insuficientes"
+        detalhe_indice = f"São necessários 3 registros nos últimos 180 dias; encontrados: {registros_indice}."
+    else:
+        valor_indice = f"{indice_constancia:.0f}/100"
+        detalhe_indice = f"Calculado com {registros_indice} registros nos últimos 180 dias."
+    st.metric("Índice de constância de limpeza", valor_indice)
+    st.caption(
+        f"{detalhe_indice} Indicador global dos registros do sistema, não individual por bueiro. "
+        "Quanto mais regulares os intervalos, maior o índice."
+    )
+    st.caption(
+        "Método: IC = 100 / (1 + CV), em que CV = desvio-padrão amostral / média dos intervalos. "
+        "Referência para o CV: [NIST Dataplot — Coefficient of Variation]"
+        "(https://www.itl.nist.gov/div898/software/dataplot/refman2/auxillar/coefvari.htm). "
+        "O índice é uma métrica operacional derivada para este projeto, não uma norma de manutenção."
+    )
 
 
 # ---------------------------------------------------------------
@@ -274,7 +457,21 @@ with tab_ia:
                 st.metric("Confiança", f"{m['probabilidade_classe'] * 100:.0f}%")
                 st.write(f"**Modelo:** {m['modelo_utilizado']}")
                 st.write("**Probabilidades por classe:**")
-                st.bar_chart(pd.Series(m["classes_probabilidades"]))
+                df_probabilidades = pd.DataFrame(
+                    list(m["classes_probabilidades"].items()),
+                    columns=["Risco", "Probabilidade"],
+                )
+                fig_classes = px.bar(
+                    df_probabilidades,
+                    x="Risco",
+                    y="Probabilidade",
+                    color="Risco",
+                    color_discrete_map=CORES_RISCO,
+                    title=f"Probabilidade por nível de risco · limpeza {r.get('urgencia_limpeza', 'Rotina').lower()}",
+                )
+                fig_classes.update_yaxes(range=[0, 1], tickformat=".0%")
+                fig_classes.update_layout(showlegend=False)
+                st.plotly_chart(fig_classes, use_container_width=True)
 
                 # Dados climáticos
                 clima = r.get("dados_climaticos_utilizados")
@@ -446,3 +643,177 @@ with tab_manual:
             if resultado:
                 st.success("Evento registrado!")
                 st.rerun()
+
+with tab_mapa:
+    st.subheader("Inventário geográfico de bueiros")
+    st.caption("Pontos de montante e jusante do bueiros.csv; coordenadas ausentes ou inválidas são omitidas.")
+    rodovias_mapa = get_json("/bueiros/rodovias") or []
+    if not rodovias_mapa:
+        st.info("O inventário não está disponível.")
+    else:
+        rodovia_padrao = (
+            bueiro_selecionado["rodovia"]
+            if bueiro_selecionado and bueiro_selecionado["rodovia"] in rodovias_mapa
+            else rodovias_mapa[0]
+        )
+        rodovia_mapa = st.selectbox(
+            "Rodovia para visualizar",
+            rodovias_mapa,
+            index=rodovias_mapa.index(rodovia_padrao),
+            key="rodovia_mapa",
+        )
+        registros_mapa = get_json("/bueiros/", params={"rodovia": rodovia_mapa}) or []
+        pontos_mapa = []
+        for bueiro in registros_mapa:
+            selecionado = bool(
+                bueiro_selecionado
+                and bueiro["id"] == bueiro_selecionado["id"]
+                and bueiro["rodovia"] == rodovia_mapa
+            )
+            for nome_ponto, sufixo in (("Montante", "montante"), ("Jusante", "jusante")):
+                pontos_mapa.append({
+                    "latitude": bueiro[f"latitude_{sufixo}"],
+                    "longitude": bueiro[f"longitude_{sufixo}"],
+                    "Bueiro": f"{bueiro['rodovia']} · km {bueiro['km']:.3f}",
+                    "Ponto": nome_ponto,
+                    "Legenda": f"{'Selecionado' if selecionado else 'Inventário'} · {nome_ponto}",
+                    "Tipo": bueiro["tipo"],
+                })
+
+        if pontos_mapa:
+            df_mapa = pd.DataFrame(pontos_mapa)
+            mapa_foca_selecionado = bool(
+                bueiro_selecionado and bueiro_selecionado["rodovia"] == rodovia_mapa
+            )
+            centro = {
+                "lat": float(user_lat) if mapa_foca_selecionado else float(df_mapa["latitude"].median()),
+                "lon": float(user_lon) if mapa_foca_selecionado else float(df_mapa["longitude"].median()),
+            }
+            fig_mapa = px.scatter_map(
+                df_mapa,
+                lat="latitude",
+                lon="longitude",
+                color="Legenda",
+                hover_name="Bueiro",
+                hover_data={"Ponto": True, "Tipo": True, "latitude": False, "longitude": False},
+                color_discrete_map={
+                    "Selecionado · Montante": "#c0392b",
+                    "Selecionado · Jusante": "#ed7d31",
+                    "Inventário · Montante": "#167d9a",
+                    "Inventário · Jusante": "#35a6a0",
+                },
+                map_style="open-street-map",
+                zoom=11 if mapa_foca_selecionado else 7,
+                center=centro,
+                height=620,
+                title=f"Bueiros inventariados · {rodovia_mapa}",
+            )
+            fig_mapa.update_layout(margin={"r": 0, "t": 45, "l": 0, "b": 0})
+            st.plotly_chart(fig_mapa, use_container_width=True)
+            st.caption(f"{len(registros_mapa)} bueiros mapeados; cada registro pode ter até dois pontos geográficos.")
+        else:
+            st.info("Não há coordenadas válidas para a rodovia selecionada.")
+
+    st.divider()
+    titulo_local = (
+        f"{bueiro_selecionado['rodovia']} · km {bueiro_selecionado['km']:.3f}"
+        if bueiro_selecionado
+        else preset_escolhido
+    )
+    st.subheader(f"Solicitações SAC de limpeza próximas · {titulo_local}")
+    raio_sac = st.slider(
+        "Raio de busca dos chamados SAC (m)",
+        min_value=100,
+        max_value=5000,
+        value=500,
+        step=100,
+        key="raio_sac_limpeza",
+    )
+    dados_sac = get_json(
+        "/bueiros/solicitacoes-limpeza",
+        params={"lat": user_lat, "lon": user_lon, "raio_m": raio_sac},
+    )
+    if dados_sac:
+        sac_col1, sac_col2, sac_col3 = st.columns(3)
+        sac_col1.metric("Chamados encontrados", dados_sac["total_encontradas"])
+        sac_col2.metric("Finalizados no SAC", dados_sac["total_finalizadas"])
+        sac_col3.metric("Cancelados no SAC", dados_sac["total_canceladas"])
+
+        indice_sac = dados_sac.get("indice_constancia_chamados")
+        if indice_sac is None:
+            st.info("Índice histórico indisponível: são necessários ao menos 3 chamados finalizados próximos.")
+        else:
+            periodo_sac = (
+                f"Período dos pareceres: {dados_sac['periodo_inicio'][:10]} a {dados_sac['periodo_fim'][:10]}. "
+                if dados_sac.get("periodo_inicio") and dados_sac.get("periodo_fim")
+                else ""
+            )
+            st.metric("Regularidade histórica dos chamados SAC", f"{indice_sac:.0f}/100")
+            st.caption(
+                f"{periodo_sac}Intervalo médio entre pareceres finalizados: "
+                f"{dados_sac['intervalo_medio_dias']:.1f} dias. "
+                "É um indicador de recorrência de solicitações encerradas, não comprovação de limpeza executada."
+            )
+
+        pontos_sac = [{
+            "latitude": float(user_lat),
+            "longitude": float(user_lon),
+            "Camada": "Local analisado",
+            "Endereço": titulo_local,
+            "Situação": "Referência",
+            "Data do parecer": "",
+            "Distância (m)": 0,
+        }]
+        for solicitacao in dados_sac.get("solicitacoes", []):
+            endereco = f"{solicitacao['logradouro']}, {solicitacao['numero']}".strip(", ")
+            pontos_sac.append({
+                "latitude": solicitacao["latitude"],
+                "longitude": solicitacao["longitude"],
+                "Camada": f"SAC · {solicitacao['situacao'].title()}",
+                "Endereço": endereco or f"Chamado SAC #{solicitacao['id']}",
+                "Situação": solicitacao["situacao"],
+                "Data do parecer": solicitacao["data_parecer"],
+                "Distância (m)": solicitacao["distancia_m"],
+            })
+
+        if dados_sac["total_encontradas"]:
+            df_sac = pd.DataFrame(pontos_sac)
+            fig_sac = px.scatter_map(
+                df_sac,
+                lat="latitude",
+                lon="longitude",
+                color="Camada",
+                hover_name="Endereço",
+                hover_data={
+                    "Situação": True,
+                    "Data do parecer": True,
+                    "Distância (m)": True,
+                    "latitude": False,
+                    "longitude": False,
+                },
+                color_discrete_map={
+                    "Local analisado": "#c0392b",
+                    "SAC · Finalizada": "#167d9a",
+                    "SAC · Cancelada": "#d6a500",
+                },
+                map_style="open-street-map",
+                zoom=max(11, min(15, 16 - round(raio_sac / 1000))),
+                center={"lat": float(user_lat), "lon": float(user_lon)},
+                height=560,
+                title="Chamados SAC georreferenciados no entorno",
+            )
+            fig_sac.update_layout(margin={"r": 0, "t": 45, "l": 0, "b": 0})
+            st.plotly_chart(fig_sac, use_container_width=True)
+            st.dataframe(
+                pd.DataFrame(dados_sac.get("solicitacoes", [])).drop(
+                    columns=["latitude", "longitude", "servico"], errors="ignore"
+                ).head(20),
+                use_container_width=True,
+                hide_index=True,
+            )
+        else:
+            st.info(f"Nenhum chamado SAC encontrado em um raio de {raio_sac} m desta localização.")
+        st.caption(
+            "Fonte: sac_limpeza_bueiro.csv (2020–2021). A situação FINALIZADA indica encerramento "
+            "da solicitação no SAC; não confirma, isoladamente, a execução da limpeza no bueiro."
+        )

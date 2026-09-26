@@ -54,6 +54,24 @@ BUEIRO_LONGITUDE=-46.6333
 
 Essas coordenadas sao utilizadas nas consultas de clima, topografia, historico de alagamentos e uso do solo. Nao e necessario instalar GPS em um bueiro fixo.
 
+### Inventario geográfico de bueiros
+
+O endpoint `GET /bueiros/rodovias` lista as rodovias com coordenadas validas no arquivo `datasets_exemplo/bueiros.csv`. Use `GET /bueiros/?rodovia=SP%20081` para consultar os registros de uma rodovia. Cada registro contem coordenadas de montante e jusante, e esses pontos podem ser selecionados no painel para alimentar as consultas geográficas.
+
+Para incluir outro ponto pelo painel, expanda **Adicionar novo bueiro** na barra **Localização do Bueiro** e informe regional, elemento, rodovia/logradouro, quilometro ou referencia, data do levantamento, tipo/material, dimensoes e coordenadas de montante/jusante. A API tambem aceita `POST /bueiros/` com esses campos; valida os limites das coordenadas e persiste o cadastro em `datasets_exemplo/bueiros_adicionados.json`, sem modificar o CSV de origem. Os novos registros passam a aparecer nas rotas de rodovia e no mapa.
+
+O arquivo representa bueiros de rodovias, nao um cadastro urbano de bocas de lobo. Linhas sem coordenadas validas sao ignoradas.
+
+O endpoint `GET /bueiros/solicitacoes-limpeza?lat=-23.55&lon=-46.63&raio_m=500` associa chamados do SAC proximos a coordenada ativa. A geometria do arquivo `datasets_exemplo/sac_limpeza_bueiro.csv` esta armazenada em UTM SIRGAS 2000 / zona 23S (EPSG:31983) e e convertida para latitude/longitude (EPSG:4326) com `pyproj`. O raio aceito e de 100 a 5.000 metros.
+
+O indice local retornado e a regularidade historica das datas de parecer dos chamados `FINALIZADA` encontrados no raio, calculado pela mesma formula de constancia descrita abaixo. O CSV contem solicitacoes SAC (principalmente de 2020 a 2021); `FINALIZADA` significa solicitacao encerrada no SAC e nao comprova, por si so, que uma limpeza fisica foi realizada naquele bueiro. O indicador deve ser interpretado como proxy de recorrencia de chamados, nao como historico operacional confirmado.
+
+### Indice de constancia de limpeza
+
+O painel calcula um indicador global com os registros de limpeza dos ultimos 180 dias. Sao necessarios pelo menos tres registros para comparar dois ou mais intervalos. O calculo e `IC = 100 / (1 + CV)`, onde `CV = desvio-padrao amostral dos intervalos / media dos intervalos`; maior regularidade entre registros resulta em indice mais alto. Esse KPI foi derivado para o projeto e nao representa uma norma nem comprova a eficacia da limpeza; o banco ainda nao relaciona cada limpeza a um bueiro especifico.
+
+Referencia estatistica do coeficiente de variacao: NIST Dataplot, [Coefficient of Variation](https://www.itl.nist.gov/div898/software/dataplot/refman2/auxillar/coefvari.htm), que define `CV` como desvio-padrao dividido pela media.
+
 ## 2. Processamento da leitura
 
 Ao receber uma leitura, a API:

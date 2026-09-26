@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
 
-from .routers import sensores, alertas, limpeza, compactacao, historico, ia
+from .routers import sensores, alertas, limpeza, compactacao, historico, ia, bueiros
 from .dados_externos import inicializar_dados_externos
 
 @asynccontextmanager
@@ -23,7 +23,8 @@ app.include_router(limpeza.router)
 app.include_router(compactacao.router)
 app.include_router(historico.router)
 app.include_router(ia.router)
+app.include_router(bueiros.router)
 
 @app.get("/")
 def root():
-    return {"message": "API do bueiro inteligente rodando"}
+    return {"message": "API do bueiro inteligente rodando"}

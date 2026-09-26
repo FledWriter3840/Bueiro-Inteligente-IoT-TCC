@@ -56,4 +56,5 @@ python-dotenv==1.1.0
 # UTILITÁRIOS
 # =========================================================
 python-dateutil==2.9.0.post0
+pyproj==3.8.0
 ```
