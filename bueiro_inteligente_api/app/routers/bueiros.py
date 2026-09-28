@@ -192,6 +192,29 @@ def _carregar_solicitacoes_sac() -> tuple[dict, ...]:
     return tuple(solicitacoes)
 
 
+@router.get("/locais-sac")
+def listar_locais_sac():
+    """Lista locais únicos com chamados SAC que podem ser cadastrados no inventário."""
+    locais = {}
+    for solicitacao in _carregar_solicitacoes_sac():
+        chave = (round(solicitacao["latitude"], 6), round(solicitacao["longitude"], 6))
+        if chave not in locais:
+            locais[chave] = {
+                "id": f"SAC-{solicitacao['id']}",
+                "latitude": solicitacao["latitude"],
+                "longitude": solicitacao["longitude"],
+                "logradouro": solicitacao["logradouro"],
+                "numero": solicitacao["numero"],
+                "total_solicitacoes": 0,
+            }
+        locais[chave]["total_solicitacoes"] += 1
+
+    return sorted(
+        locais.values(),
+        key=lambda local: (local["logradouro"], local["numero"], local["id"]),
+    )
+
+
 @router.get("/solicitacoes-limpeza")
 def listar_solicitacoes_limpeza_proximas(
     lat: float = Query(ge=-90, le=90),

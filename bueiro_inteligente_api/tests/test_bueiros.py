@@ -51,6 +51,23 @@ class TestBueirosRouter(unittest.TestCase):
         self.assertTrue(all(item["distancia_m"] <= 1000 for item in dados["solicitacoes"]))
         self.assertIn("indice_constancia_chamados", dados)
 
+    def test_lista_locais_sac_com_coordenadas_validas_e_deduplicados(self):
+        resposta = self.client.get("/bueiros/locais-sac")
+
+        self.assertEqual(resposta.status_code, 200)
+        locais = resposta.json()
+        self.assertTrue(locais)
+        self.assertEqual(
+            len(locais),
+            len({(round(local["latitude"], 6), round(local["longitude"], 6)) for local in locais}),
+        )
+        for local in locais:
+            self.assertGreaterEqual(local["latitude"], -90)
+            self.assertLessEqual(local["latitude"], 90)
+            self.assertGreaterEqual(local["longitude"], -180)
+            self.assertLessEqual(local["longitude"], 180)
+            self.assertGreater(local["total_solicitacoes"], 0)
+
     def test_rejeita_raio_fora_dos_limites(self):
         resposta = self.client.get(
             "/bueiros/solicitacoes-limpeza",

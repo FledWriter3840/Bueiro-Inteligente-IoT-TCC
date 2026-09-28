@@ -71,6 +71,7 @@ CORES_RISCO = {
     "Alto": "#ed7d31",
     "Crítico": "#c0392b",
 }
+COR_GRAFICO_TEMPERATURA = "#f97316"
 
 
 # ---------------------------------------------------------------
@@ -107,14 +108,16 @@ with st.sidebar:
     }
 
     opcao_inventario = "Inventário rodoviário (bueiros.csv)"
+    opcao_sac = "Localização do SAC (bueiro/boca de lobo)"
     preset_escolhido = st.selectbox(
         "Local predefinido",
-        [*PRESETS_LOCALIZACAO.keys(), opcao_inventario],
+        [*PRESETS_LOCALIZACAO.keys(), opcao_inventario, opcao_sac],
         key="preset_local",
     )
 
     bueiros_rota = []
     bueiro_selecionado = None
+    local_sac_selecionado = None
     ponto_selecionado = "Montante"
     if preset_escolhido == opcao_inventario:
         rodovias_disponiveis = get_json("/bueiros/rodovias") or []
@@ -139,12 +142,30 @@ with st.sidebar:
         else:
             preset_lat, preset_lon = -23.5505, -46.6333
             st.warning("Não há bueiros com coordenadas válidas para essa rodovia.")
+    elif preset_escolhido == opcao_sac:
+        locais_sac = get_json("/bueiros/locais-sac") or []
+        if locais_sac:
+            local_sac_selecionado = st.selectbox(
+                "Local do chamado SAC",
+                locais_sac,
+                format_func=lambda local: (
+                    f"{local['logradouro']}, {local['numero']} · "
+                    f"{local['total_solicitacoes']} chamado(s)"
+                ),
+                key="local_sac_selecionado",
+            )
+            preset_lat = local_sac_selecionado["latitude"]
+            preset_lon = local_sac_selecionado["longitude"]
+        else:
+            preset_lat, preset_lon = -23.5505, -46.6333
+            st.warning("Não há locais georreferenciados no arquivo de chamados SAC.")
     else:
         preset_lat, preset_lon = PRESETS_LOCALIZACAO[preset_escolhido]
 
     chave_localizacao = (
         f"inventario_{bueiro_selecionado['id']}_{ponto_selecionado}"
         if bueiro_selecionado
+        else f"{local_sac_selecionado['id']}" if local_sac_selecionado
         else preset_escolhido.replace(" ", "_")
     )
     if preset_escolhido == "Personalizado":
@@ -160,6 +181,8 @@ with st.sidebar:
 
     if bueiro_selecionado:
         st.caption(f"{bueiro_selecionado['rodovia']} · km {bueiro_selecionado['km']:.3f} · {ponto_selecionado}")
+    elif local_sac_selecionado:
+        st.caption("Local do SAC selecionado; use o cadastro abaixo para adicioná-lo ao inventário.")
 
     with st.expander("Adicionar novo bueiro", expanded=False):
         mensagem_cadastro = st.session_state.pop("bueiro_cadastrado_msg", None)
@@ -167,19 +190,32 @@ with st.sidebar:
             st.success(mensagem_cadastro)
 
         with st.form("form_novo_bueiro", clear_on_submit=False):
-            regional_nova = st.text_input("Regional", value="Cadastro manual", max_chars=80)
+            regional_nova = st.text_input(
+                "Regional",
+                value="Cadastro via SAC" if local_sac_selecionado else "Cadastro manual",
+                max_chars=80,
+            )
             elemento_novo = st.selectbox(
                 "Elemento",
                 ["Bueiro", "Boca de lobo", "Poço de visita", "Outro"],
+                index=1 if local_sac_selecionado else 0,
             )
             rodovia_nova = st.text_input(
                 "Rodovia ou logradouro",
-                value=bueiro_selecionado["rodovia"] if bueiro_selecionado else "",
+                value=(
+                    f"{local_sac_selecionado['logradouro']}, {local_sac_selecionado['numero']}"
+                    if local_sac_selecionado
+                    else bueiro_selecionado["rodovia"] if bueiro_selecionado else ""
+                ),
                 max_chars=80,
             )
             km_novo = st.number_input("Quilômetro / referência", min_value=0.0, value=0.0, step=0.1)
             levantamento_novo = st.date_input("Data do levantamento", value=date.today())
-            tipo_novo = st.text_input("Tipo / material", value="Boca de lobo", max_chars=160)
+            tipo_novo = st.text_input(
+                "Tipo / material",
+                value="Boca de lobo (local do SAC)" if local_sac_selecionado else "Boca de lobo",
+                max_chars=160,
+            )
             extensao_nova = st.number_input("Extensão (m)", min_value=0.0, value=0.0, step=0.5)
             dimensao_nova = st.number_input("Dimensão (m)", min_value=0.0, value=0.0, step=0.1)
             st.caption("Informe as coordenadas geográficas dos pontos de montante e jusante.")
@@ -341,6 +377,7 @@ with tab_geral:
             title="Distância medida pelo sensor ao longo do tempo",
             labels={"valor_leitura": "Distância (cm)", "data_hora": "Data/Hora"}
         )
+        fig.update_traces(line_color=COR_GRAFICO_TEMPERATURA, line_width=2.5)
         fig.update_xaxes(tickformat="%d/%m/%Y %H:%M")
         fig.add_hline(y=15, line_dash="dash", line_color="red",
                        annotation_text="Limite crítico (15cm)")
@@ -553,6 +590,7 @@ with tab_simulacao:
                 title="Projeção de nível ao longo do tempo",
                 labels={"minuto": "Minutos", "distancia_prevista_cm": "Distância prevista (cm)"}
             )
+            fig.update_traces(line_color=COR_GRAFICO_TEMPERATURA, line_width=2.5)
             fig.add_hline(y=15, line_dash="dash", line_color="red", annotation_text="Limite crítico")
             st.plotly_chart(fig, use_container_width=True)
             st.dataframe(df, use_container_width=True, hide_index=True)
