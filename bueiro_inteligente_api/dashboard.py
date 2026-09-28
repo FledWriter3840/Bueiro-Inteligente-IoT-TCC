@@ -23,9 +23,9 @@ def formatar_datas_pt_br(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def get_json(endpoint: str, params: dict | None = None):
+def get_json(endpoint: str, params: dict | None = None, timeout: int = 5):
     try:
-        resp = requests.get(f"{API_URL}{endpoint}", params=params, timeout=5)
+        resp = requests.get(f"{API_URL}{endpoint}", params=params, timeout=timeout)
         resp.raise_for_status()
         return resp.json()
     except Exception as e:
@@ -283,7 +283,7 @@ with st.sidebar:
         st.caption("🌤️ Clima: Fallback ativo")
 
     st.divider()
-    topo_side = get_json("/ia/topografia-atual", params=loc_params)
+    topo_side = get_json("/ia/topografia-atual", params=loc_params, timeout=65)
     if topo_side and topo_side.get("disponivel"):
         st.subheader("⛰️ Topografia (COP30)")
         st.write(f"**Cota Altimétrica:** {topo_side.get('altitude_metros')} m")
@@ -305,7 +305,11 @@ tab_geral, tab_leituras, tab_eventos, tab_ia, tab_simulacao, tab_manual, tab_map
 with tab_geral:
     leituras = get_json("/sensores/leituras") or []
     alertas = get_json("/alertas/") or []
-    previsao = get_json("/ia/previsao", params={"id_sensor": 1, **loc_params})
+    previsao = get_json(
+        "/ia/previsao",
+        params={"id_sensor": 1, **loc_params},
+        timeout=120,
+    )
 
     col1, col2, col3, col4, col5 = st.columns(5)
 
@@ -464,7 +468,11 @@ with tab_ia:
     st.caption("Motor 1: Multivariado (6 Fontes). Motor 2: Machine Learning.")
 
     if st.button("🧠 Rodar comparativo agora"):
-        comparativo = get_json("/ia/comparativo", params={"id_sensor": 1, **loc_params})
+        comparativo = get_json(
+            "/ia/comparativo",
+            params={"id_sensor": 1, **loc_params},
+            timeout=120,
+        )
         if comparativo:
             col1, col2 = st.columns(2)
 
@@ -545,7 +553,7 @@ with tab_ia:
             st.caption("🌤️ Clima: Fallback sazonal ativo (configure OPENWEATHER_API_KEY).")
 
     with col_topo:
-        topo_info = get_json("/ia/topografia-atual", params=loc_params)
+        topo_info = get_json("/ia/topografia-atual", params=loc_params, timeout=65)
         if topo_info and topo_info.get("disponivel"):
             fundo_txt = "Sim (Depressão/Convergência)" if topo_info.get("eh_fundo_de_vale") else "Não"
             st.markdown(f"**⛰️ Topografia (Copernicus DEM):** Cota {topo_info.get('altitude_metros')}m")
