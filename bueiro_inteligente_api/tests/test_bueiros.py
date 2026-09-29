@@ -123,6 +123,22 @@ class TestBueirosRouter(unittest.TestCase):
 
         self.assertEqual(resposta.status_code, 422)
 
+    def test_rejeita_campos_em_branco_e_propriedades_desconhecidas(self):
+        resposta = self.client.post("/bueiros/", json={
+            "regional": "   ",
+            "rodovia": "SP 999",
+            "levantamento": "2026-09-26",
+            "km": 1,
+            "tipo": "Concreto",
+            "latitude_montante": 0,
+            "longitude_montante": 0,
+            "latitude_jusante": 0,
+            "longitude_jusante": 0,
+            "campo_nao_reconhecido": "valor",
+        })
+
+        self.assertEqual(resposta.status_code, 422)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,22 +1,21 @@
-from fastapi import APIRouter, Depends, FastAPI
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends
 from .. import models, schemas
-from ..database import get_db
+from ..dependencies import get_compactacao_service
+from ..services.records import RecordService
 
 router = APIRouter(
     prefix="/compactacao",
     tags=["Compactacao"])
 
-@router.post("/", response_model=schemas.CompactacaoOut)
-def registrar_compactacao(compactacao: schemas.CompactacaoCreate, db: Session = Depends(get_db)):
-    nova_compactacao = models.Compactacao(
-        nivel_residuo = compactacao.nivel_residuo
-    )
-    db.add(nova_compactacao)
-    db.commit()
-    db.refresh(nova_compactacao)
-    return nova_compactacao
+@router.post("/", response_model=schemas.CompactacaoOut, status_code=201)
+def registrar_compactacao(
+    compactacao: schemas.CompactacaoCreate,
+    service: RecordService[models.Compactacao] = Depends(get_compactacao_service),
+):
+    return service.create(compactacao)
 
 @router.get("/", response_model=list[schemas.CompactacaoOut])
-def listar_compacacoes(db: Session = Depends(get_db)):
-    return db.query(models.Compactacao).order_by(models.Compactacao.data_hora.desc()).all()
+def listar_compacacoes(
+    service: RecordService[models.Compactacao] = Depends(get_compactacao_service),
+):
+    return service.list_recent()

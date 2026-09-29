@@ -1,10 +1,100 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 from datetime import datetime
 
+
+class ProblemValidationError(BaseModel):
+    location: list[str | int]
+    message: str
+    code: str
+
+
+class ProblemDetails(BaseModel):
+    type: str = "about:blank"
+    title: str
+    status: int
+    detail: str
+    instance: str
+    errors: list[ProblemValidationError] | None = None
+
+
+class HealthOut(BaseModel):
+    message: str
+
+
+class BueiroCreate(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid", allow_inf_nan=False)
+
+    regional: str = Field(min_length=1, max_length=80)
+    elemento: str = Field(default="Bueiro", min_length=1, max_length=80)
+    rodovia: str = Field(min_length=1, max_length=80)
+    levantamento: str = Field(min_length=1, max_length=20)
+    km: float = Field(ge=0)
+    extensao_m: float | None = Field(default=None, ge=0)
+    dimensao_m: float | None = Field(default=None, ge=0)
+    tipo: str = Field(min_length=1, max_length=160)
+    latitude_montante: float = Field(ge=-90, le=90)
+    longitude_montante: float = Field(ge=-180, le=180)
+    latitude_jusante: float = Field(ge=-90, le=90)
+    longitude_jusante: float = Field(ge=-180, le=180)
+
+
+class BueiroOut(BaseModel):
+    id: int | str
+    regional: str
+    elemento: str
+    rodovia: str
+    levantamento: str
+    km: float
+    extensao_m: float | None
+    dimensao_m: float | None
+    tipo: str
+    latitude_montante: float
+    longitude_montante: float
+    latitude_jusante: float
+    longitude_jusante: float
+
+
+class LocalSACOut(BaseModel):
+    id: str
+    latitude: float
+    longitude: float
+    logradouro: str
+    numero: str
+    total_solicitacoes: int
+
+
+class SolicitacaoSACOut(BaseModel):
+    id: str
+    latitude: float
+    longitude: float
+    logradouro: str
+    numero: str
+    data_abertura: str
+    data_parecer: str
+    situacao: str
+    canal: str
+    servico: str
+    distancia_m: float
+
+
+class SolicitacoesProximasOut(BaseModel):
+    latitude_referencia: float
+    longitude_referencia: float
+    raio_m: int
+    total_encontradas: int
+    total_finalizadas: int
+    total_canceladas: int
+    indice_constancia_chamados: float | None
+    intervalo_medio_dias: float | None
+    periodo_inicio: str | None
+    periodo_fim: str | None
+    solicitacoes: list[SolicitacaoSACOut]
+
+
 class LeituraSensorCreate(BaseModel):
-    id_sensor: int
-    valor_leitura: float
-    unidade_medida: str
+    id_sensor: int = Field(gt=0)
+    valor_leitura: float = Field(allow_inf_nan=False)
+    unidade_medida: str = Field(min_length=1, max_length=20)
 
 class LeituraSensorOut(LeituraSensorCreate):
     id_leitura: int
@@ -20,7 +110,9 @@ class LeituraSensorOut(LeituraSensorCreate):
         from_attributes = True
 
 class LimpezaCreate(BaseModel):
-    status_limpeza: str
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    status_limpeza: str = Field(min_length=1, max_length=20)
 
 class LimpezaOut(LimpezaCreate):
     id_limpeza: int
@@ -29,9 +121,11 @@ class LimpezaOut(LimpezaCreate):
         from_attributes = True
 
 class AlertaCreate(BaseModel):
-    descricao: str
-    nivel_criticidade: str
-    id_leitura: int
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    descricao: str = Field(min_length=1, max_length=255)
+    nivel_criticidade: str = Field(min_length=1, max_length=20)
+    id_leitura: int = Field(gt=0)
 
 class AlertaOut(AlertaCreate):
     id_alerta: int
@@ -40,7 +134,9 @@ class AlertaOut(AlertaCreate):
         from_attributes = True
 
 class CompactacaoCreate(BaseModel):
-    nivel_residuo: float
+    model_config = ConfigDict(extra="forbid")
+
+    nivel_residuo: float = Field(ge=0, allow_inf_nan=False)
 
 class CompactacaoOut(CompactacaoCreate):
     id_compactacao: int
@@ -49,8 +145,10 @@ class CompactacaoOut(CompactacaoCreate):
         from_attributes = True
 
 class HistoricoCreate(BaseModel):
-    descricao_evento: str
-    id_usuario: int | None = None
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    descricao_evento: str = Field(min_length=1, max_length=255)
+    id_usuario: int | None = Field(default=None, gt=0)
 
 class HistoricoOut(HistoricoCreate):
     id_historico: int

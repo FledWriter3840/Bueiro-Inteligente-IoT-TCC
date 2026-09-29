@@ -1,22 +1,21 @@
-from fastapi import APIRouter, Depends, FastAPI
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends
 from .. import models, schemas
-from ..database import get_db
+from ..dependencies import get_limpeza_service
+from ..services.records import RecordService
 
 router = APIRouter(
     prefix="/limpeza",
     tags=["Limpeza"])
 
-@router.post("/", response_model=schemas.LimpezaOut)
-def registrar_limpeza(limpeza: schemas.LimpezaCreate, db: Session = Depends(get_db)):
-    nova_limpeza = models.Limpeza(
-        status_limpeza = limpeza.status_limpeza
-    )
-    db.add(nova_limpeza)
-    db.commit()
-    db.refresh(nova_limpeza)
-    return nova_limpeza
+@router.post("/", response_model=schemas.LimpezaOut, status_code=201)
+def registrar_limpeza(
+    limpeza: schemas.LimpezaCreate,
+    service: RecordService[models.Limpeza] = Depends(get_limpeza_service),
+):
+    return service.create(limpeza)
 
 @router.get("/", response_model=list[schemas.LimpezaOut])
-def listar_limpezas(db: Session = Depends(get_db)):
-    return db.query(models.Limpeza).order_by(models.Limpeza.data_hora.desc()).all()
+def listar_limpezas(
+    service: RecordService[models.Limpeza] = Depends(get_limpeza_service),
+):
+    return service.list_recent()

@@ -1,0 +1,1 @@
+"""Data access adapters for the API."""

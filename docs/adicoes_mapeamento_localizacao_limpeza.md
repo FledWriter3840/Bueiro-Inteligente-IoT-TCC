@@ -128,7 +128,7 @@ O detalhe ao passar o cursor mostra risco, urgência de limpeza e probabilidade.
 
 - `bueiro_inteligente_api/app/routers/bueiros.py`: leitura do inventário, cadastro, endpoints e consulta espacial do SAC.
 - `bueiro_inteligente_api/app/main.py`: inclusão do router de bueiros na aplicação FastAPI.
-- `bueiro_inteligente_api/dashboard.py`: seletores, formulário de cadastro, mapa, gráficos e indicadores.
+- O dashboard Streamlit citado nesta etapa foi substituído pelo frontend React em `bueiro_inteligente_api/frontend`, que mantém seletores, cadastro, mapa, gráficos e indicadores.
 - `bueiro_inteligente_api/tests/test_bueiros.py`: testes do inventário, consulta SAC, limites e cadastro.
 - `bueiro_inteligente_api/datasets_exemplo/bueiros.csv`: inventário de origem, preservado pelo cadastro manual.
 - `bueiro_inteligente_api/datasets_exemplo/bueiros_adicionados.json`: destino persistente dos cadastros feitos pelo painel/API; criado quando o primeiro bueiro é salvo.

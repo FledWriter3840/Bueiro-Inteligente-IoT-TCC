@@ -1,15 +1,16 @@
 import csv
-import json
 from functools import lru_cache
 from io import StringIO
 from math import asin, cos, radians, sin, sqrt
 from pathlib import Path
 import re
-from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pyproj import Transformer
+
+from .. import schemas
+from ..repositories.bueiros import BueiroJsonRepository, BueiroStorageError
+from ..services.bueiros import BueiroService
 
 router = APIRouter(prefix="/bueiros", tags=["Bueiros"])
 CSV_PATH = Path(__file__).resolve().parents[2] / "datasets_exemplo" / "bueiros.csv"
@@ -18,46 +19,27 @@ ADICOES_PATH = Path(__file__).resolve().parents[2] / "datasets_exemplo" / "bueir
 SAC_COORDINATE_TRANSFORMER = Transformer.from_crs("EPSG:31983", "EPSG:4326", always_xy=True)
 
 
-class NovoBueiro(BaseModel):
-    regional: str = Field(min_length=1, max_length=80)
-    elemento: str = Field(default="Bueiro", min_length=1, max_length=80)
-    rodovia: str = Field(min_length=1, max_length=80)
-    levantamento: str = Field(min_length=1, max_length=20)
-    km: float = Field(ge=0)
-    extensao_m: float | None = Field(default=None, ge=0)
-    dimensao_m: float | None = Field(default=None, ge=0)
-    tipo: str = Field(min_length=1, max_length=160)
-    latitude_montante: float = Field(ge=-90, le=90)
-    longitude_montante: float = Field(ge=-180, le=180)
-    latitude_jusante: float = Field(ge=-90, le=90)
-    longitude_jusante: float = Field(ge=-180, le=180)
+def get_bueiro_service() -> BueiroService:
+    return BueiroService(BueiroJsonRepository(ADICOES_PATH))
 
 
-def _carregar_bueiros_adicionados() -> list[dict]:
-    if not ADICOES_PATH.exists():
-        return []
+def _carregar_bueiros_adicionados(service: BueiroService) -> list[dict]:
     try:
-        registros = json.loads(ADICOES_PATH.read_text(encoding="utf-8"))
-    except (OSError, ValueError) as exc:
-        raise HTTPException(status_code=500, detail="Não foi possível ler os bueiros cadastrados.") from exc
-    return registros if isinstance(registros, list) else []
+        return service.listar_adicionados()
+    except BueiroStorageError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
-@router.post("/", status_code=201)
-def cadastrar_bueiro(novo_bueiro: NovoBueiro):
+@router.post("/", status_code=201, response_model=schemas.BueiroOut)
+def cadastrar_bueiro(
+    novo_bueiro: schemas.BueiroCreate,
+    service: BueiroService = Depends(get_bueiro_service),
+):
     """Persiste um bueiro novo sem alterar o CSV de inventário original."""
-    ADICOES_PATH.parent.mkdir(parents=True, exist_ok=True)
-    registro = {"id": f"NOVO-{uuid4().hex[:10].upper()}", **novo_bueiro.model_dump()}
-    registros = _carregar_bueiros_adicionados()
-    registros.append(registro)
     try:
-        ADICOES_PATH.write_text(
-            json.dumps(registros, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
-    except OSError as exc:
-        raise HTTPException(status_code=500, detail="Não foi possível salvar o novo bueiro.") from exc
-    return registro
+        return service.cadastrar(novo_bueiro)
+    except BueiroStorageError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 def _numero(valor: str | None) -> float:
@@ -126,16 +108,19 @@ def _carregar_inventario() -> tuple[dict, ...]:
 
 
 @router.get("/rodovias", response_model=list[str])
-def listar_rodovias():
+def listar_rodovias(service: BueiroService = Depends(get_bueiro_service)):
     """Lista as rodovias disponíveis no inventário com coordenadas válidas."""
-    inventario = (*_carregar_inventario(), *_carregar_bueiros_adicionados())
+    inventario = (*_carregar_inventario(), *_carregar_bueiros_adicionados(service))
     return sorted({bueiro["rodovia"] for bueiro in inventario if bueiro["rodovia"]})
 
 
-@router.get("/")
-def listar_bueiros(rodovia: str | None = Query(default=None)):
+@router.get("/", response_model=list[schemas.BueiroOut])
+def listar_bueiros(
+    rodovia: str | None = Query(default=None),
+    service: BueiroService = Depends(get_bueiro_service),
+):
     """Lista bueiros do CSV e cadastros manuais, opcionalmente filtrados por rodovia."""
-    inventario = (*_carregar_inventario(), *_carregar_bueiros_adicionados())
+    inventario = (*_carregar_inventario(), *_carregar_bueiros_adicionados(service))
     if rodovia:
         inventario = tuple(bueiro for bueiro in inventario if bueiro["rodovia"] == rodovia)
     return sorted(inventario, key=lambda bueiro: (bueiro["rodovia"], bueiro["km"], str(bueiro["id"])))
@@ -192,7 +177,7 @@ def _carregar_solicitacoes_sac() -> tuple[dict, ...]:
     return tuple(solicitacoes)
 
 
-@router.get("/locais-sac")
+@router.get("/locais-sac", response_model=list[schemas.LocalSACOut])
 def listar_locais_sac():
     """Lista locais únicos com chamados SAC que podem ser cadastrados no inventário."""
     locais = {}
@@ -215,7 +200,7 @@ def listar_locais_sac():
     )
 
 
-@router.get("/solicitacoes-limpeza")
+@router.get("/solicitacoes-limpeza", response_model=schemas.SolicitacoesProximasOut)
 def listar_solicitacoes_limpeza_proximas(
     lat: float = Query(ge=-90, le=90),
     lon: float = Query(ge=-180, le=180),

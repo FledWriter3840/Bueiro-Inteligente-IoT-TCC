@@ -3,6 +3,8 @@ from contextlib import asynccontextmanager
 
 from .routers import sensores, alertas, limpeza, compactacao, historico, ia, bueiros
 from .dados_externos import inicializar_dados_externos
+from .errors import register_exception_handlers
+from . import schemas
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -16,6 +18,7 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan
 )
+register_exception_handlers(app)
 
 app.include_router(sensores.router)
 app.include_router(alertas.router)
@@ -25,6 +28,6 @@ app.include_router(historico.router)
 app.include_router(ia.router)
 app.include_router(bueiros.router)
 
-@app.get("/")
+@app.get("/", response_model=schemas.HealthOut)
 def root():
     return {"message": "API do bueiro inteligente rodando"}

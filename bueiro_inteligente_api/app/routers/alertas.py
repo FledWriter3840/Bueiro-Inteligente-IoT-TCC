@@ -1,24 +1,21 @@
-from fastapi import APIRouter, Depends, FastAPI
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends
 from .. import models, schemas
-from ..database import get_db
+from ..dependencies import get_alerta_service
+from ..services.records import RecordService
 
 router = APIRouter(
     prefix="/alertas",
     tags=["Alertas"])
 
-@router.post("/", response_model=schemas.AlertaOut)
-def registrar_alerta(alerta: schemas.AlertaCreate, db: Session = Depends(get_db)):
-    novo_alerta = models.Alerta(
-        descricao=alerta.descricao,
-        nivel_criticidade=alerta.nivel_criticidade,
-        id_leitura=alerta.id_leitura
-    )
-    db.add(novo_alerta)
-    db.commit()
-    db.refresh(novo_alerta)
-    return novo_alerta
+@router.post("/", response_model=schemas.AlertaOut, status_code=201)
+def registrar_alerta(
+    alerta: schemas.AlertaCreate,
+    service: RecordService[models.Alerta] = Depends(get_alerta_service),
+):
+    return service.create(alerta)
 
 @router.get("/", response_model=list[schemas.AlertaOut])
-def listar_alertas(db: Session = Depends(get_db)):
-    return db.query(models.Alerta).order_by(models.Alerta.data_hora.desc()).all()
+def listar_alertas(
+    service: RecordService[models.Alerta] = Depends(get_alerta_service),
+):
+    return service.list_recent()

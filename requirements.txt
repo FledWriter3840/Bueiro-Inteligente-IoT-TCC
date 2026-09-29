@@ -5,9 +5,9 @@
 # =========================================================
 
 # =========================================================
-# DASHBOARD E INTERFACE WEB
+# DASHBOARD WEB (React/Vite)
+# Dependencias em bueiro_inteligente_api/frontend/package.json
 # =========================================================
-streamlit==1.45.1
 
 # =========================================================
 # BANCO DE DADOS MYSQL
@@ -25,7 +25,6 @@ numpy==2.2.5
 # VISUALIZAÇÃO DE DADOS E GRÁFICOS
 # =========================================================
 matplotlib==3.10.1
-plotly==6.0.1
 
 # =========================================================
 # INTELIGÊNCIA ARTIFICIAL E MACHINE LEARNING

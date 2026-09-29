@@ -71,10 +71,10 @@ O sistema aplica um intervalo de seguranca de 5 minutos entre ciclos automaticos
 
 Enquanto o Wokwi estiver enviando dados:
 
-1. Abra o dashboard Streamlit.
-2. Entre em `IA & Previsao`.
+1. Na pasta `bueiro_inteligente_api/frontend`, execute `npm run dev`.
+2. Abra `http://localhost:5173` e entre em `IA e previsão`.
 3. Consulte as leituras recebidas.
-4. Use `Rodar comparativo agora` para visualizar os dois modelos.
+4. Use `Rodar comparativo` para visualizar os dois modelos.
 5. Confira os campos `nivel_risco_multivariado`, `nivel_risco_ml`, `nivel_risco` e `tempo_limpeza_segundos` na resposta da API.
 
 O Wokwi nao acessa `localhost` diretamente. A URL do sketch deve apontar para o tunel publico ativo.

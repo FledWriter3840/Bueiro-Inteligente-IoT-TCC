@@ -33,7 +33,7 @@ O timeout controla quanto tempo o dashboard espera pela resposta; ele não alter
 ## 4. Arquivos envolvidos
 
 - `bueiro_inteligente_api/app/routers/bueiros.py`: carrega e converte os pontos SAC e implementa `GET /bueiros/locais-sac`.
-- `bueiro_inteligente_api/dashboard.py`: seletor SAC, preenchimento do formulário, cores dos gráficos e timeouts por endpoint.
+- O painel Streamlit original foi substituído pelo frontend React em `bueiro_inteligente_api/frontend`; os fluxos SAC e geográficos continuam disponíveis no novo painel.
 - `bueiro_inteligente_api/tests/test_bueiros.py`: teste de locais SAC únicos e com coordenadas válidas.
 - `docs/adicoes_mapeamento_localizacao_limpeza.md`: documentação anterior do inventário, mapa e solicitações SAC próximas.
 
