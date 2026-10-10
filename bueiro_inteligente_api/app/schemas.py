@@ -102,9 +102,9 @@ class LeituraSensorOut(LeituraSensorCreate):
     acionar_limpeza: bool = False
     tempo_limpeza_segundos: int = 0
     motivo_limpeza: str = ""
-    nivel_risco: str = "Baixo"
-    nivel_risco_multivariado: str = "Baixo"
-    nivel_risco_ml: str = "Baixo"
+    nivel_risco: str | None = None
+    nivel_risco_multivariado: str | None = None
+    nivel_risco_ml: str | None = None
     modelo_decisao: str = "Multivariada + Machine Learning"
     class Config:
         from_attributes = True

@@ -7,8 +7,8 @@
 const char* ssid = "Wokwi-GUEST";
 const char* password = "";
 
-// URL da sua API no ngrok
-const char* apiUrl = "https://around-figment-pelvis.ngrok-free.dev/sensores/leitura";
+// URL da sua API no LocalTunnel
+const char* apiUrl = "https://hungry-carrots-cut.loca.lt/sensores/leitura";
 
 // Pinos dos Sensores e Atuadores
 const int trigPin = 5;

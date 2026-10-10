@@ -252,7 +252,7 @@ Cria uma projecao matematica da subida da agua.
 
 ## 9. Execucao no Wokwi
 
-O Wokwi precisa acessar a API por uma URL publica, como Ngrok ou LocalTunnel. O endereco `localhost` nao funciona diretamente dentro do simulador.
+O Wokwi precisa acessar a API por uma URL pública fornecida pelo LocalTunnel. O endereço `localhost` não funciona diretamente dentro do simulador.
 
 O fluxo da simulacao e:
 

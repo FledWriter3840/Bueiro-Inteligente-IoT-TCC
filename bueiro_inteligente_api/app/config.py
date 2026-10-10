@@ -12,7 +12,7 @@ load_dotenv()
 # OpenWeatherMap
 # ─────────────────────────────────────────────────────────────────
 OPENWEATHER_API_KEY: str = os.getenv("OPENWEATHER_API_KEY", "")
-OPENWEATHER_CACHE_TTL_SEGUNDOS: int = int(os.getenv("OPENWEATHER_CACHE_TTL", "600"))
+OPENWEATHER_CACHE_TTL_SEGUNDOS: int = int(os.getenv("OPENWEATHER_CACHE_TTL", "60"))
 
 # ─────────────────────────────────────────────────────────────────
 # OpenTopography (Copernicus DEM GLO-30)

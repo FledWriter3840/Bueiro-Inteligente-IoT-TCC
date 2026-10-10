@@ -15,7 +15,6 @@ from __future__ import annotations
 import time
 import logging
 from dataclasses import dataclass, field
-from typing import Optional
 
 import requests
 
@@ -68,22 +67,50 @@ class DadosClimaticos:
 # Cache em memória (singleton)
 # ─────────────────────────────────────────────────────────────────
 
-_cache: Optional[DadosClimaticos] = None
-_cache_timestamp: float = 0.0
+_cache: dict[tuple[float, float], tuple[DadosClimaticos, float]] = {}
 
 
-def _cache_valido() -> bool:
-    global _cache, _cache_timestamp
-    if _cache is None:
+def _cache_valido(lat: float, lon: float) -> bool:
+    agora = time.time()
+    expirados = [
+        coordenadas
+        for coordenadas, (_, timestamp) in _cache.items()
+        if agora - timestamp >= OPENWEATHER_CACHE_TTL_SEGUNDOS
+    ]
+    for coordenadas in expirados:
+        del _cache[coordenadas]
+
+    entrada = _cache.get((lat, lon))
+    if entrada is None:
         return False
-    return (time.time() - _cache_timestamp) < OPENWEATHER_CACHE_TTL_SEGUNDOS
+    return (agora - entrada[1]) < OPENWEATHER_CACHE_TTL_SEGUNDOS
 
 
 def limpar_cache() -> None:
     """Força a próxima consulta a buscar dados frescos da API."""
-    global _cache, _cache_timestamp
-    _cache = None
-    _cache_timestamp = 0.0
+    _cache.clear()
+
+
+def _registrar_erro_openweather(endpoint: str, exc: requests.RequestException) -> None:
+    if isinstance(exc, requests.HTTPError):
+        resposta = exc.response
+        status = resposta.status_code if resposta is not None else "desconhecido"
+        mensagem = "resposta sem mensagem"
+        if resposta is not None:
+            try:
+                corpo = resposta.json()
+                if isinstance(corpo, dict):
+                    mensagem = corpo.get("message", mensagem)
+            except ValueError:
+                pass
+        logger.error("OpenWeatherMap /%s retornou HTTP %s: %s", endpoint, status, mensagem)
+        return
+
+    logger.error(
+        "Falha de rede consultando OpenWeatherMap /%s (%s)",
+        endpoint,
+        type(exc).__name__,
+    )
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -113,8 +140,8 @@ def _buscar_clima_atual(
         )
         resp.raise_for_status()
         return resp.json()
-    except Exception as exc:
-        logger.error("Erro ao consultar OpenWeatherMap /weather: %s", exc)
+    except requests.RequestException as exc:
+        _registrar_erro_openweather("weather", exc)
         return None
 
 
@@ -141,8 +168,8 @@ def _buscar_previsao(
         )
         resp.raise_for_status()
         return resp.json()
-    except Exception as exc:
-        logger.error("Erro ao consultar OpenWeatherMap /forecast: %s", exc)
+    except requests.RequestException as exc:
+        _registrar_erro_openweather("forecast", exc)
         return None
 
 
@@ -174,21 +201,20 @@ def obter_dados_climaticos(
     - Se a API Key não estiver configurada ou a API estiver offline,
       retorna um DadosClimaticos com valores de fallback e disponivel=False.
     """
-    global _cache, _cache_timestamp
-
-    if not forcar_atualizacao and _cache_valido():
-        return _cache  # type: ignore[return-value]
+    coordenadas = (lat, lon)
+    if not forcar_atualizacao and _cache_valido(lat, lon):
+        return _cache[coordenadas][0]
 
     # Tenta buscar dados da API
     clima_atual = _buscar_clima_atual(lat, lon)
-    forecast = _buscar_previsao(lat, lon)
 
     if clima_atual is None:
         # Fallback — sistema continua funcionando sem dados climáticos
         fallback = DadosClimaticos(disponivel=False)
-        _cache = fallback
-        _cache_timestamp = time.time()
+        _cache[coordenadas] = (fallback, time.time())
         return fallback
+
+    forecast = _buscar_previsao(lat, lon)
 
     # Extrai dados do JSON retornado pela API
     main = clima_atual.get("main", {})
@@ -207,8 +233,7 @@ def obter_dados_climaticos(
         disponivel=True,
     )
 
-    _cache = resultado
-    _cache_timestamp = time.time()
+    _cache[coordenadas] = (resultado, time.time())
 
     logger.info(
         "Dados climáticos atualizados: %s, chuva=%.1fmm/h, umidade=%d%%, previsão_3h=%.1fmm",

@@ -92,4 +92,32 @@ def listar_leituras(db: Session = Depends(get_db)):
     """
     Lista todas as leituras de sensores registradas no banco de dados.
     """
-    return db.query(models.LeituraSensor).order_by(models.LeituraSensor.data_hora.desc()).all()
+    leituras = db.query(models.LeituraSensor)\
+                  .order_by(models.LeituraSensor.data_hora.desc())\
+                  .all()
+    if not leituras:
+        return []
+
+    ids_leituras = [leitura.id_leitura for leitura in leituras]
+    previsoes = db.query(models.PrevisaoEntupimento)\
+                  .filter(models.PrevisaoEntupimento.id_leitura.in_(ids_leituras))\
+                  .order_by(
+                      models.PrevisaoEntupimento.data_hora.desc(),
+                      models.PrevisaoEntupimento.id_previsao.desc(),
+                  )\
+                  .all()
+    risco_por_leitura: dict[int, str] = {}
+    for previsao in previsoes:
+        risco_por_leitura.setdefault(previsao.id_leitura, previsao.nivel_risco)
+
+    return [
+        {
+            "id_sensor": leitura.id_sensor,
+            "valor_leitura": leitura.valor_leitura,
+            "unidade_medida": leitura.unidade_medida,
+            "id_leitura": leitura.id_leitura,
+            "data_hora": leitura.data_hora,
+            "nivel_risco": risco_por_leitura.get(leitura.id_leitura),
+        }
+        for leitura in leituras
+    ]

@@ -8,7 +8,7 @@ export type SensorReading = {
   data_hora: string
   acionar_limpeza?: boolean
   tempo_limpeza_segundos?: number
-  nivel_risco?: RiskLevel
+  nivel_risco?: RiskLevel | null
 }
 
 export type AlertRecord = {

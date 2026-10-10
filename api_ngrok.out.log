@@ -1,0 +1,16 @@
+t=2026-10-07T19:52:33-0300 lvl=info msg="no configuration paths supplied"
+t=2026-10-07T19:52:33-0300 lvl=info msg="using configuration at default config path" path=C:\Users\marco\AppData\Local\ngrok\ngrok.yml
+t=2026-10-07T19:52:33-0300 lvl=info msg="open config file" path=C:\Users\marco\AppData\Local\ngrok\ngrok.yml err=<nil>
+t=2026-10-07T19:52:33-0300 lvl=info msg="FIPS 140 mode" enabled=false
+t=2026-10-07T19:52:33-0300 lvl=info msg="starting web service" obj=web addr=127.0.0.1:4040 allow_hosts=[]
+t=2026-10-07T19:52:33-0300 lvl=info msg="client session established" obj=tunnels.session
+t=2026-10-07T19:52:33-0300 lvl=info msg="tunnel session started" obj=tunnels.session
+t=2026-10-07T19:52:33-0300 lvl=info msg="started tunnel" obj=tunnels name=command_line addr=http://localhost:8000 url=https://around-figment-pelvis.ngrok-free.dev
+t=2026-10-07T19:53:14-0300 lvl=info msg="join connections" obj=join id=5597570e38fe l=127.0.0.1:8000 r=[2804:7f0:6a03:91cc:8da5:7fe0:6e0f:e601]:52707
+t=2026-10-07T20:27:58-0300 lvl=info msg="INFO received stop request obj=app stopReq=\"{err:<nil> restart:false}\""
+t=2026-10-07T20:27:58-0300 lvl=info msg="session closing" obj=tunnels.session err=<nil>
+t=2026-10-07T20:27:58-0300 lvl=info msg="accept failed" obj=tunnels.session obj=csess id=b1eac7915cca err="reconnecting session closed"
+t=2026-10-07T20:27:58-0300 lvl=info msg="failed to accept connection: Listener closed" obj=tunnels.session clientid=bd3ef7d64d0f8d75d19692b9d1e257fd
+t=2026-10-07T20:27:58-0300 lvl=warn msg="Stopping forwarder" name=command_line acceptErr="failed to accept connection: Listener closed"
+t=2026-10-07T20:27:58-0300 lvl=warn msg="Error restarting forwarder" name=command_line err="failed to start tunnel: session closed"
+t=2026-10-07T20:27:58-0300 lvl=info msg="no more state changes" obj=tunnels.session

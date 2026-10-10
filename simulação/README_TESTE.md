@@ -9,13 +9,13 @@
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-3. Abra um tunel publico para a porta 8000, por exemplo:
+3. Abra um tunnel público para a porta 8000 com o LocalTunnel:
 
 ```powershell
-ngrok http 8000
+npx localtunnel --port 8000
 ```
 
-4. Copie a URL HTTPS gerada pelo tunel para `apiUrl` no sketch do Wokwi.
+4. Copie a URL HTTPS gerada pelo LocalTunnel para `apiUrl` no sketch do Wokwi.
 
 ## Teste da API antes do Wokwi
 
