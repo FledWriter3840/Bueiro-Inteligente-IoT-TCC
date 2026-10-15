@@ -4,6 +4,7 @@ Carrega variáveis de ambiente do .env e expõe constantes globais.
 """
 
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 
 from .enums import NivelRisco
@@ -34,18 +35,24 @@ ML_N_AMOSTRAS: int = 3000
 ML_RANDOM_STATE: int = 42
 ML_TEST_SIZE: float = 0.2
 ML_MAX_DEPTH: int = 5
+ML_MODEL_PATH: Path = Path(os.getenv(
+    "ML_MODEL_PATH",
+    str(Path(__file__).resolve().parent / "ml" / "modelo_risco.joblib"),
+))
 
 # ─────────────────────────────────────────────────────────────────
 # OpenWeatherMap
 # ─────────────────────────────────────────────────────────────────
 OPENWEATHER_API_KEY: str = os.getenv("OPENWEATHER_API_KEY", "")
 OPENWEATHER_CACHE_TTL_SEGUNDOS: int = int(os.getenv("OPENWEATHER_CACHE_TTL", "60"))
+OPENWEATHER_TIMEOUT_SEGUNDOS: int = 8
 
 # ─────────────────────────────────────────────────────────────────
 # OpenTopography (Copernicus DEM GLO-30)
 # ─────────────────────────────────────────────────────────────────
 OPENTOPOGRAPHY_API_KEY: str = os.getenv("OPENTOPOGRAPHY_API_KEY", "")
 OPENTOPOGRAPHY_DATASET: str = os.getenv("OPENTOPOGRAPHY_DATASET", "COP30")
+OPENTOPOGRAPHY_TIMEOUT_SEGUNDOS: int = 10
 
 # ─────────────────────────────────────────────────────────────────
 # Localização padrão do bueiro (São Paulo, SP)
@@ -66,6 +73,9 @@ OVERPASS_API_URL: str = os.getenv(
 	"https://overpass-api.de/api/interpreter",
 )
 OVERPASS_RAIO_METROS: int = int(os.getenv("OVERPASS_RAIO_METROS", "500"))
+OVERPASS_TIMEOUT_SEGUNDOS: int = 20
+OVERPASS_QUERY_TIMEOUT_SEGUNDOS: int = 15
+OVERPASS_CACHE_TTL_SEGUNDOS: int = 600
 
 # ─────────────────────────────────────────────────────────────────
 # Pesos do scoring ponderado (somam 1.0)

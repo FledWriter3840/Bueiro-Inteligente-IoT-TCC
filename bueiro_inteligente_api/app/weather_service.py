@@ -21,9 +21,11 @@ import requests
 from .config import (
     OPENWEATHER_API_KEY,
     OPENWEATHER_CACHE_TTL_SEGUNDOS,
+    OPENWEATHER_TIMEOUT_SEGUNDOS,
     BUEIRO_LATITUDE,
     BUEIRO_LONGITUDE,
 )
+from .external_http import external_http_client
 
 logger = logging.getLogger(__name__)
 
@@ -127,7 +129,7 @@ def _buscar_clima_atual(
         return None
 
     try:
-        resp = requests.get(
+        return external_http_client.get_json(
             f"{BASE_URL}/weather",
             params={
                 "lat": lat,
@@ -136,10 +138,8 @@ def _buscar_clima_atual(
                 "units": "metric",
                 "lang": "pt_br",
             },
-            timeout=8,
+            timeout=OPENWEATHER_TIMEOUT_SEGUNDOS,
         )
-        resp.raise_for_status()
-        return resp.json()
     except requests.RequestException as exc:
         _registrar_erro_openweather("weather", exc)
         return None
@@ -154,7 +154,7 @@ def _buscar_previsao(
         return None
 
     try:
-        resp = requests.get(
+        return external_http_client.get_json(
             f"{BASE_URL}/forecast",
             params={
                 "lat": lat,
@@ -164,10 +164,8 @@ def _buscar_previsao(
                 "lang": "pt_br",
                 "cnt": 2,  # Apenas os próximos 2 intervalos de 3h
             },
-            timeout=8,
+            timeout=OPENWEATHER_TIMEOUT_SEGUNDOS,
         )
-        resp.raise_for_status()
-        return resp.json()
     except requests.RequestException as exc:
         _registrar_erro_openweather("forecast", exc)
         return None

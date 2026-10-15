@@ -1,13 +1,15 @@
 from datetime import datetime
+from threading import Lock
 
-import joblib
 import pandas as pd
+from sklearn.base import BaseEstimator
 from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..enums import NivelRisco
 from ..repositories.previsoes import PrevisaoRepository
-from .train import MODELO_PATH, FEATURES, treinar_modelo
+from .features import FEATURES
+from .model_storage import carregar_modelo
 
 
 class PrevisorEntupimentoML:
@@ -21,14 +23,23 @@ class PrevisorEntupimentoML:
     operacional e gerando histórico suficiente de leituras.
     """
 
-    _modelo = None
+    _modelo: BaseEstimator | None = None
+    _lock = Lock()
 
     @classmethod
-    def _carregar_modelo(cls):
+    def _carregar_modelo(cls) -> BaseEstimator:
         if cls._modelo is None:
-            if not MODELO_PATH.exists():
-                treinar_modelo()
-            cls._modelo = joblib.load(MODELO_PATH)
+            with cls._lock:
+                if cls._modelo is None:
+                    try:
+                        cls._modelo = carregar_modelo()
+                    except FileNotFoundError:
+                        from .train import treinar_modelo
+
+                        treinar_modelo()
+                        cls._modelo = carregar_modelo()
+        if cls._modelo is None:
+            raise RuntimeError("Não foi possível carregar o modelo de risco.")
         return cls._modelo
 
     @staticmethod

@@ -23,8 +23,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-import requests
-
 from .config import (
     DADOS_ALAGAMENTOS_PATH,
     DADOS_GEOGRAFICOS_PATH,
@@ -32,7 +30,11 @@ from .config import (
     OPENTOPOGRAPHY_API_KEY,
     OVERPASS_API_URL,
     OVERPASS_RAIO_METROS,
+    OVERPASS_TIMEOUT_SEGUNDOS,
+    OVERPASS_QUERY_TIMEOUT_SEGUNDOS,
+    OVERPASS_CACHE_TTL_SEGUNDOS,
 )
+from .external_http import external_http_client
 
 logger = logging.getLogger(__name__)
 
@@ -509,11 +511,14 @@ class UsoDeSoloProvider:
         """Consulta elementos do entorno e converte-os para o contrato do preditor."""
         chave = f"{lat:.5f}:{lon:.5f}:{raio_metros}"
         cacheado = self._cache_api.get(chave)
-        if cacheado and time.time() - cacheado[0] < 600:
+        if (
+            cacheado
+            and time.time() - cacheado[0] < OVERPASS_CACHE_TTL_SEGUNDOS
+        ):
             return cacheado[1]
 
         consulta = f"""
-[out:json][timeout:15];
+[out:json][timeout:{OVERPASS_QUERY_TIMEOUT_SEGUNDOS}];
 (
   nwr(around:{raio_metros},{lat},{lon})["amenity"="marketplace"];
   nwr(around:{raio_metros},{lat},{lon})["shop"];
@@ -525,14 +530,13 @@ out center tags;
 """
 
         try:
-            resposta = requests.post(
+            resposta = external_http_client.post_json(
                 OVERPASS_API_URL,
                 data=consulta,
                 headers={"User-Agent": "BueiroInteligenteTCC/1.0"},
-                timeout=20,
+                timeout=OVERPASS_TIMEOUT_SEGUNDOS,
             )
-            resposta.raise_for_status()
-            elementos = resposta.json().get("elements", [])
+            elementos = resposta.get("elements", [])
         except Exception as exc:
             logger.warning("Falha na consulta de uso do solo via Overpass: %s", exc)
             return None

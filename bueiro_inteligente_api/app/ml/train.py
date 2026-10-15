@@ -1,16 +1,11 @@
-from pathlib import Path
-
-import joblib
 from sklearn.model_selection import train_test_split
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 
 from ..config import ML_MAX_DEPTH, ML_N_AMOSTRAS, ML_RANDOM_STATE, ML_TEST_SIZE
 from .dataset import gerar_dataset_sintetico
-
-MODELO_PATH = Path(__file__).parent / "modelo_risco.joblib"
-FEATURES = ["distancia_atual_cm", "taxa_subida_cm_min", "media_movel_3_cm"]
-LABEL = "nivel_risco"
+from .features import FEATURES, LABEL
+from .model_storage import salvar_modelo
 
 
 def treinar_modelo(n_amostras: int = ML_N_AMOSTRAS, salvar: bool = True) -> dict:
@@ -43,7 +38,7 @@ def treinar_modelo(n_amostras: int = ML_N_AMOSTRAS, salvar: bool = True) -> dict
     y_pred = modelo.predict(X_test)
 
     if salvar:
-        joblib.dump(modelo, MODELO_PATH)
+        salvar_modelo(modelo)
 
     return {
         "acuracia": round(accuracy_score(y_test, y_pred), 4),

@@ -21,15 +21,15 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-import requests
-
 from .config import (
     OPENTOPOGRAPHY_API_KEY,
     OPENTOPOGRAPHY_DATASET,
+    OPENTOPOGRAPHY_TIMEOUT_SEGUNDOS,
     BUEIRO_LATITUDE,
     BUEIRO_LONGITUDE,
 )
 from .enums import NivelRisco
+from .external_http import external_http_client
 
 logger = logging.getLogger(__name__)
 
@@ -124,26 +124,27 @@ class TopografiaService:
                 "dataset": dataset,
                 "API_Key": OPENTOPOGRAPHY_API_KEY,
             }
-            resp = requests.get(API_URL, params=params, timeout=10)
-
-            if resp.status_code == 200:
-                dados = resp.json()
-                elev = dados.get("Elevation") if dados.get("Elevation") is not None else dados.get("elevation")
-                if elev is not None:
-                    elev_float = float(elev)
-                    self._cache[chave] = elev_float
-                    self._salvar_cache_disco()
-                    logger.info(
-                        "Elevação obtida via OpenTopography: %.2fm para (%.5f, %.5f)",
-                        elev_float, lat, lon
-                    )
-                    return elev_float
-            else:
-                logger.warning(
-                    "OpenTopography API retornou status %d: %s",
-                    resp.status_code, resp.text[:200]
+            dados = external_http_client.get_json(
+                API_URL,
+                params=params,
+                timeout=OPENTOPOGRAPHY_TIMEOUT_SEGUNDOS,
+            )
+            elev = (
+                dados.get("Elevation")
+                if dados.get("Elevation") is not None
+                else dados.get("elevation")
+            )
+            if elev is not None:
+                elev_float = float(elev)
+                self._cache[chave] = elev_float
+                self._salvar_cache_disco()
+                logger.info(
+                    "Elevação obtida via OpenTopography: %.2fm para (%.5f, %.5f)",
+                    elev_float, lat, lon
                 )
-                return None
+                return elev_float
+            logger.warning("OpenTopography não retornou elevação para (%.5f, %.5f)", lat, lon)
+            return None
         except Exception as exc:
             logger.error("Erro na requisição para OpenTopography: %s", exc)
             return None

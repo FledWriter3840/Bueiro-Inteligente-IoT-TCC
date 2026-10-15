@@ -135,6 +135,18 @@ O modelo ML e uma `DecisionTreeClassifier` treinada inicialmente com dados sinte
 
 O modelo consegue processar leituras reais do sensor, mas seu treinamento inicial e baseado em cenarios simulados. Com o funcionamento do bueiro fisico, o historico real pode ser usado para treinar um modelo mais confiavel.
 
+O artefato e carregado somente na primeira predicao. Se ainda nao existir, o modelo e treinado sob demanda, sem treino durante a importacao da API. O caminho padrao e `app/ml/modelo_risco.joblib` e pode ser substituido pela variavel de ambiente `ML_MODEL_PATH`.
+
+## 4.1. Provedores externos
+
+OpenWeatherMap, OpenTopography e Overpass usam a interface HTTP JSON comum em `app/external_http.py`, com timeout por provedor: 8, 10 e 20 segundos, respectivamente. A consulta Overpass tambem limita o processamento remoto a 15 segundos.
+
+- OpenWeatherMap: cache em memoria por coordenadas, com TTL configurado por `OPENWEATHER_CACHE_TTL` (60 segundos por padrao). Sem chave ou em falha, retorna dados climaticos de fallback com `disponivel=False`; o fallback tambem fica em cache ate o TTL expirar.
+- OpenTopography: cache persistente em `topografia_cache.json`; sem chave, falha ou resposta sem elevacao, retorna o perfil conservador/indisponivel ja definido pelo servico.
+- Overpass: cache em memoria por coordenadas e raio, com TTL de 600 segundos. Em falha ou resposta sem elementos, usa o perfil local de uso do solo.
+
+Os fallbacks mantem a operacao local disponivel, mas nao representam dados atuais dos provedores. A propriedade `disponivel` sinaliza quando um resultado vem de dados remotos.
+
 ## 5. Decisao conjunta
 
 Os dois modelos sao executados automaticamente quando uma nova leitura chega. A API compara os riscos usando a ordem:
