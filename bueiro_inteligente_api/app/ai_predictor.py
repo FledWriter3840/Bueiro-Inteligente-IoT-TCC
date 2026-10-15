@@ -47,6 +47,7 @@ from .dados_externos import (
     PerfilTopografico,
     PerfilUsoSolo,
 )
+from .repositories.previsoes import PrevisaoRepository
 
 
 class PrevisorEntupimentoIA:
@@ -75,13 +76,10 @@ class PrevisorEntupimentoIA:
         do sensor e todas as fontes de dados disponíveis.
         """
         agora = datetime.utcnow()
+        repositorio = PrevisaoRepository(db)
 
         # ─── 1. Coleta de dados do sensor (banco de dados) ─────────
-        leituras = db.query(models.LeituraSensor)\
-                     .filter(models.LeituraSensor.id_sensor == id_sensor)\
-                     .order_by(models.LeituraSensor.data_hora.desc())\
-                     .limit(10)\
-                     .all()
+        leituras = repositorio.leituras_recentes(id_sensor)
 
         if not leituras:
             return schemas.AnaliseIAResult(
@@ -106,9 +104,7 @@ class PrevisorEntupimentoIA:
         taxa_subida_cm_min, tendencia = _calcular_tendencia(leituras, agora)
 
         # ─── Busca nível de resíduo da última compactação ──────────
-        ultima_compactacao = db.query(models.Compactacao)\
-                               .order_by(models.Compactacao.data_hora.desc())\
-                               .first()
+        ultima_compactacao = repositorio.ultima_compactacao()
         nivel_residuo_pct = float(ultima_compactacao.nivel_residuo) if ultima_compactacao else 0.0
 
         # ─── 2. Coleta de dados climáticos (OpenWeatherMap) ────────
@@ -229,32 +225,31 @@ class PrevisorEntupimentoIA:
         alerta_gerado = False
 
         if persistir:
-            nova_previsao = models.PrevisaoEntupimento(
-                probabilidade=round(probabilidade, 2),
-                nivel_risco=nivel_risco.value,
-                id_leitura=leitura_mais_recente.id_leitura,
-            )
-            db.add(nova_previsao)
+            registros_para_salvar = [
+                models.PrevisaoEntupimento(
+                    probabilidade=round(probabilidade, 2),
+                    nivel_risco=nivel_risco.value,
+                    id_leitura=leitura_mais_recente.id_leitura,
+                )
+            ]
 
             # Dispara alerta se risco for Alto ou Crítico
             # (evita alertas duplicados nos últimos 2 min)
             if nivel_risco in (NivelRisco.ALTO, NivelRisco.CRITICO):
                 dois_minutos_atras = agora - timedelta(minutes=2)
-                alerta_recente = db.query(models.Alerta)\
-                                   .filter(models.Alerta.data_hora >= dois_minutos_atras)\
-                                   .first()
-                if not alerta_recente:
+                if not repositorio.existe_alerta_desde(dois_minutos_atras):
                     desc_alerta = (
                         f"IA Multivariada: {nivel_risco.value.upper()} risco "
                         f"(Prob: {int(probabilidade * 100)}%). "
                         f"Limpeza: {urgencia_limpeza}. {recomendacao}"
                     )
-                    novo_alerta = models.Alerta(
-                        descricao=desc_alerta,
-                        nivel_criticidade=nivel_risco.value,
-                        id_leitura=leitura_mais_recente.id_leitura,
+                    registros_para_salvar.append(
+                        models.Alerta(
+                            descricao=desc_alerta,
+                            nivel_criticidade=nivel_risco.value,
+                            id_leitura=leitura_mais_recente.id_leitura,
+                        )
                     )
-                    db.add(novo_alerta)
                     alerta_gerado = True
 
             # Registra ciclo de limpeza e compactação automática se for Urgente/Emergência
@@ -262,16 +257,14 @@ class PrevisorEntupimentoIA:
                 cinco_minutos_atras = agora - timedelta(
                     minutes=JANELA_LIMPEZA_MINUTOS
                 )
-                limpeza_recente = db.query(models.Limpeza)\
-                                    .filter(models.Limpeza.data_hora >= cinco_minutos_atras)\
-                                    .first()
-                if not limpeza_recente:
+                if not repositorio.existe_limpeza_desde(cinco_minutos_atras):
                     # Limite de VARCHAR(20) no MySQL
                     status_auto = "Auto (Emergência)" if urgencia_limpeza == "Emergência" else "Auto (Urgente)"
-                    nova_limpeza = models.Limpeza(status_limpeza=status_auto)
-                    db.add(nova_limpeza)
+                    registros_para_salvar.append(
+                        models.Limpeza(status_limpeza=status_auto)
+                    )
 
-            db.commit()
+            repositorio.salvar_registros(registros_para_salvar)
 
         # ═══════════════════════════════════════════════════════════
         # RESULTADO FINAL

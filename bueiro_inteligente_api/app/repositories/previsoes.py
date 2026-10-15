@@ -1,0 +1,73 @@
+from datetime import datetime
+from typing import Iterable
+
+from sqlalchemy.orm import Session
+
+from .. import models
+
+
+class PrevisaoRepository:
+    """Centraliza consultas e gravações usadas pelos motores preditivos."""
+
+    def __init__(self, session: Session):
+        self.session = session
+
+    def leituras_recentes(
+        self,
+        id_sensor: int,
+        limite: int = 10,
+    ) -> list[models.LeituraSensor]:
+        return (
+            self.session.query(models.LeituraSensor)
+            .filter(models.LeituraSensor.id_sensor == id_sensor)
+            .order_by(models.LeituraSensor.data_hora.desc())
+            .limit(limite)
+            .all()
+        )
+
+    def ultima_compactacao(self) -> models.Compactacao | None:
+        return (
+            self.session.query(models.Compactacao)
+            .order_by(models.Compactacao.data_hora.desc())
+            .first()
+        )
+
+    def existe_alerta_desde(self, instante: datetime) -> bool:
+        return (
+            self.session.query(models.Alerta)
+            .filter(models.Alerta.data_hora >= instante)
+            .first()
+            is not None
+        )
+
+    def existe_limpeza_desde(self, instante: datetime) -> bool:
+        return (
+            self.session.query(models.Limpeza)
+            .filter(models.Limpeza.data_hora >= instante)
+            .first()
+            is not None
+        )
+
+    def salvar_registros(self, registros: Iterable[object]) -> None:
+        try:
+            self.session.add_all(list(registros))
+            self.session.commit()
+        except Exception:
+            self.session.rollback()
+            raise
+
+    def salvar_previsao(self, previsao: models.PrevisaoEntupimento) -> None:
+        try:
+            self.session.add(previsao)
+            self.session.commit()
+        except Exception:
+            self.session.rollback()
+            raise
+
+    def listar_historico(self, limite: int = 50) -> list[models.PrevisaoEntupimento]:
+        return (
+            self.session.query(models.PrevisaoEntupimento)
+            .order_by(models.PrevisaoEntupimento.data_hora.desc())
+            .limit(limite)
+            .all()
+        )

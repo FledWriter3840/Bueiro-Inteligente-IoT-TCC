@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..enums import NivelRisco
+from ..repositories.previsoes import PrevisaoRepository
 from .train import MODELO_PATH, FEATURES, treinar_modelo
 
 
@@ -32,11 +33,7 @@ class PrevisorEntupimentoML:
 
     @staticmethod
     def _calcular_features(db: Session, id_sensor: int = 1):
-        leituras = db.query(models.LeituraSensor)\
-                     .filter(models.LeituraSensor.id_sensor == id_sensor)\
-                     .order_by(models.LeituraSensor.data_hora.desc())\
-                     .limit(10)\
-                     .all()
+        leituras = PrevisaoRepository(db).leituras_recentes(id_sensor)
 
         if not leituras:
             return None
@@ -104,7 +101,6 @@ class PrevisorEntupimentoML:
                 nivel_risco=classe_prevista,
                 id_leitura=features["id_leitura"]
             )
-            db.add(nova_previsao)
-            db.commit()
+            PrevisaoRepository(db).salvar_previsao(nova_previsao)
 
         return resultado

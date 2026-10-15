@@ -86,7 +86,7 @@ Ao receber uma leitura, a API:
 8. Decide se deve iniciar um ciclo de limpeza.
 9. Retorna o comando para o ESP32.
 
-Esse fluxo esta implementado principalmente em `app/routers/sensores.py` e `app/ai_predictor.py`.
+Esse fluxo e orquestrado por `app/services/leituras.py`, chamado pela rota em `app/routers/sensores.py`. Consultas e persistencia do fluxo ficam em `app/repositories/leituras.py` e `app/repositories/previsoes.py`; o calculo multivariado e o modelo ML continuam em seus modulos de predicao.
 
 ## 3. IA multivariada
 

@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-from .. import models, schemas
+from .. import schemas
 from ..database import get_db
+from ..repositories.previsoes import PrevisaoRepository
 from ..ai_predictor import PrevisorEntupimentoIA
 from ..ml.predictor import PrevisorEntupimentoML
 from ..ml.train import treinar_modelo as treinar_modelo_ml_fn
@@ -14,7 +15,6 @@ from ..config import (
     ML_N_AMOSTRAS,
 )
 from ..enums import NivelRisco
-from datetime import datetime
 
 router = APIRouter(
     prefix="/ia",
@@ -43,10 +43,7 @@ def listar_historico_previsoes(db: Session = Depends(get_db)):
     """
     Retorna o histórico das previsões de entupimento geradas pela IA e armazenadas no MySQL.
     """
-    return db.query(models.PrevisaoEntupimento)\
-             .order_by(models.PrevisaoEntupimento.data_hora.desc())\
-             .limit(50)\
-             .all()
+    return PrevisaoRepository(db).listar_historico()
 
 @router.post("/simular-cenario")
 def simular_cenario_chuva(cenario: schemas.CenarioSimulacaoRequest):
