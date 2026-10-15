@@ -1,25 +1,44 @@
 import unittest
-from datetime import datetime
+from datetime import datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+from sqlalchemy import create_engine
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
+
 from app import schemas
+from app.database import Base
 from app.enums import NivelRisco
+from app.models import Limpeza
 from app.repositories.leituras import LeituraRepository
 from app.services.leituras import (
     LeituraService,
     combinar_riscos,
     decidir_acionamento,
 )
-from sqlalchemy.exc import SQLAlchemyError
 
 
 class TestDecisoesLeitura(unittest.TestCase):
-    def test_combina_riscos_escolhendo_o_mais_severo(self):
-        self.assertEqual(
-            combinar_riscos(NivelRisco.MEDIO.value, NivelRisco.ALTO.value),
-            NivelRisco.ALTO.value,
-        )
+    def test_combina_todos_os_pares_de_riscos_escolhendo_o_mais_severo(self):
+        riscos = list(NivelRisco)
+        prioridades = {
+            NivelRisco.BAIXO: 0,
+            NivelRisco.MEDIO: 1,
+            NivelRisco.ALTO: 2,
+            NivelRisco.CRITICO: 3,
+        }
+        for multivariado in riscos:
+            for ml in riscos:
+                with self.subTest(multivariado=multivariado, ml=ml):
+                    esperado = max(
+                        (multivariado, ml),
+                        key=prioridades.__getitem__,
+                    )
+                    self.assertEqual(
+                        combinar_riscos(multivariado.value, ml.value),
+                        esperado.value,
+                    )
 
     def test_mapeia_todos_os_riscos_para_duracao(self):
         esperado = {
@@ -31,6 +50,14 @@ class TestDecisoesLeitura(unittest.TestCase):
         for risco, resultado in esperado.items():
             with self.subTest(risco=risco):
                 self.assertEqual(decidir_acionamento(risco, False), resultado)
+
+    def test_limpeza_recente_suprime_acionamento_de_todos_os_riscos(self):
+        for risco in NivelRisco:
+            with self.subTest(risco=risco):
+                self.assertEqual(
+                    decidir_acionamento(risco.value, True),
+                    (False, 0),
+                )
 
     def test_janela_recente_impede_novo_acionamento(self):
         service = LeituraService(MagicMock())
@@ -155,6 +182,33 @@ class TestLeituraRepository(unittest.TestCase):
 
         session.rollback.assert_called_once_with()
         session.refresh.assert_not_called()
+
+    def test_janela_de_cinco_minutos_inclui_limite_e_exclui_instante_anterior(self):
+        engine = create_engine("sqlite://")
+        Base.metadata.create_all(engine, tables=[Limpeza.__table__])
+        agora = datetime(2026, 10, 15, 12, 0, 0)
+
+        with Session(engine) as session:
+            session.add_all([
+                Limpeza(
+                    status_limpeza="Exatamente no limite",
+                    data_hora=agora - timedelta(minutes=5),
+                ),
+                Limpeza(
+                    status_limpeza="Um segundo fora",
+                    data_hora=agora - timedelta(minutes=5, seconds=1),
+                ),
+            ])
+            session.commit()
+
+            self.assertTrue(LeituraRepository(session).existe_limpeza_recente(agora))
+            session.query(Limpeza).filter(
+                Limpeza.status_limpeza == "Exatamente no limite"
+            ).delete()
+            session.commit()
+            self.assertFalse(LeituraRepository(session).existe_limpeza_recente(agora))
+
+        engine.dispose()
 
 
 if __name__ == "__main__":
