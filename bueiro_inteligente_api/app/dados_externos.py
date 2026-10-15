@@ -19,9 +19,8 @@ import json
 import math
 import logging
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 from .config import (
     DADOS_ALAGAMENTOS_PATH,
@@ -80,7 +79,7 @@ class HistoricoAlagamentosProvider:
     -23.5489,-46.6388,8,0.6,"Vale do Anhangabaú"
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._pontos: list[PontoAlagamento] = []
         self._carregado: bool = False
 
@@ -279,7 +278,7 @@ class DadosGeograficosProvider:
     -23.5505,-46.6333,740,1,Alto,-2.5
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._pontos: list[dict] = []
         self._carregado: bool = False
 
@@ -434,7 +433,7 @@ class UsoDeSoloProvider:
     }
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._perfil: PerfilUsoSolo = PerfilUsoSolo()
         self._carregado: bool = False
         self._cache_api: dict[str, tuple[float, PerfilUsoSolo]] = {}

@@ -106,8 +106,7 @@ class LeituraSensorOut(LeituraSensorCreate):
     nivel_risco_multivariado: str | None = None
     nivel_risco_ml: str | None = None
     modelo_decisao: str = "Multivariada + Machine Learning"
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class LimpezaCreate(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
@@ -117,8 +116,7 @@ class LimpezaCreate(BaseModel):
 class LimpezaOut(LimpezaCreate):
     id_limpeza: int
     data_hora: datetime
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class AlertaCreate(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
@@ -130,8 +128,7 @@ class AlertaCreate(BaseModel):
 class AlertaOut(AlertaCreate):
     id_alerta: int
     data_hora: datetime
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class CompactacaoCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -141,8 +138,7 @@ class CompactacaoCreate(BaseModel):
 class CompactacaoOut(CompactacaoCreate):
     id_compactacao: int
     data_hora: datetime
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class HistoricoCreate(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
@@ -153,8 +149,7 @@ class HistoricoCreate(BaseModel):
 class HistoricoOut(HistoricoCreate):
     id_historico: int
     data_hora: datetime
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class PrevisaoEntupimentoCreate(BaseModel):
     probabilidade: float
@@ -164,8 +159,7 @@ class PrevisaoEntupimentoCreate(BaseModel):
 class PrevisaoEntupimentoOut(PrevisaoEntupimentoCreate):
     id_previsao: int
     data_hora: datetime
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class AnaliseIAResult(BaseModel):
     # ── Campos originais (mantidos para compatibilidade) ──────────

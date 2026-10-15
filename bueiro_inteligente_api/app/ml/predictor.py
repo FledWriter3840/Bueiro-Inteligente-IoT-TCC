@@ -43,7 +43,10 @@ class PrevisorEntupimentoML:
         return cls._modelo
 
     @staticmethod
-    def _calcular_features(db: Session, id_sensor: int = 1):
+    def _calcular_features(
+        db: Session,
+        id_sensor: int = 1,
+    ) -> dict[str, float | int] | None:
         leituras = PrevisaoRepository(db).leituras_recentes(id_sensor)
 
         if not leituras:
@@ -74,6 +77,7 @@ class PrevisorEntupimentoML:
 
     @classmethod
     def prever(cls, db: Session, id_sensor: int = 1, persistir: bool = False) -> schemas.AnaliseIAMLResult:
+        """Prevê o risco atual e, opcionalmente, persiste o resultado."""
         modelo = cls._carregar_modelo()
         features = cls._calcular_features(db, id_sensor)
         agora = datetime.utcnow()

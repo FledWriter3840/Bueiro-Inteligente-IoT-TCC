@@ -1,3 +1,5 @@
+import logging
+
 from sklearn.model_selection import train_test_split
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
@@ -7,8 +9,13 @@ from .dataset import gerar_dataset_sintetico
 from .features import FEATURES, LABEL
 from .model_storage import salvar_modelo
 
+logger = logging.getLogger(__name__)
 
-def treinar_modelo(n_amostras: int = ML_N_AMOSTRAS, salvar: bool = True) -> dict:
+
+def treinar_modelo(
+    n_amostras: int = ML_N_AMOSTRAS,
+    salvar: bool = True,
+) -> dict[str, object]:
     """
     Treina um classificador de Árvore de Decisão sobre o dataset sintético
     de leituras do sensor, prevendo o nível de risco de entupimento.
@@ -51,6 +58,10 @@ def treinar_modelo(n_amostras: int = ML_N_AMOSTRAS, salvar: bool = True) -> dict
 
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    )
     metricas = treinar_modelo()
-    print(f"Acurácia: {metricas['acuracia']}")
-    print(metricas["relatorio_classificacao"])
+    logger.info("Acurácia: %s", metricas["acuracia"])
+    logger.info("Relatório de classificação:\n%s", metricas["relatorio_classificacao"])

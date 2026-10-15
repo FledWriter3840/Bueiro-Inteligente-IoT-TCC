@@ -11,11 +11,13 @@ router = APIRouter(
 def registrar_compactacao(
     compactacao: schemas.CompactacaoCreate,
     service: RecordService[models.Compactacao] = Depends(get_compactacao_service),
-):
+) -> models.Compactacao:
+    """Registra uma medição de compactação."""
     return service.create(compactacao)
 
 @router.get("/", response_model=list[schemas.CompactacaoOut])
 def listar_compacacoes(
     service: RecordService[models.Compactacao] = Depends(get_compactacao_service),
-):
+) -> list[models.Compactacao]:
+    """Lista as medições de compactação registradas."""
     return service.list_recent()

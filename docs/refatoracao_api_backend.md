@@ -89,10 +89,14 @@ Execute os comandos na pasta `bueiro_inteligente_api`. O painel fica normalmente
 
 ## Testes e validacao
 
-Foram executados 14 testes unitarios dos fluxos de bueiros, tratamento de erros e service/repository SQL com sessao simulada. Tambem foi verificada a geracao do OpenAPI, incluindo o status `201` nos quatro endpoints CRUD, e os diagnosticos estaticos dos arquivos alterados.
+Na validacao mais recente, 30 testes unitarios passaram e 4 subtests passaram, excluindo `tests/test_integracao_api.py`. A geracao do OpenAPI foi conferida: a API manteve 20 caminhos, metodos e codigos de resposta, incluindo `201` nos quatro endpoints CRUD.
 
 Os testes de integracao com MySQL nao foram executados; e necessario validar as operacoes contra um banco acessivel no ambiente de execucao.
 
-## Escopo ainda nao migrado
+## Convencoes de qualidade
 
-Os routers de sensores e IA continuam contendo consultas e orquestracao diretamente relacionadas aos modelos de predicao. A separacao dessas rotas requer testes com banco e substitutos para os componentes de IA, por isso ficou fora desta etapa. O formato dos sucessos tambem nao foi convertido para um envelope global, para evitar uma quebra maior nos consumidores atuais.
+Os routers de sensores, IA e bueiros delegam a orquestracao a servicos, enquanto a persistencia SQL e o acesso aos arquivos ficam em repositorios. Os erros HTTP, de validacao e inesperados reutilizam os handlers globais registrados em `app/errors.py`; nao se deve criar handlers equivalentes por rota.
+
+Os schemas de saida reutilizam os schemas de entrada por heranca, sem repetir campos, e habilitam leitura de atributos ORM com `ConfigDict(from_attributes=True)`. Falhas dos provedores externos sao registradas com logging; os fallbacks existentes mantem a disponibilidade do sistema sem mascarar a indicacao de indisponibilidade dos dados.
+
+As respostas de sucesso nao foram convertidas para um envelope global, para preservar os contratos dos consumidores atuais.

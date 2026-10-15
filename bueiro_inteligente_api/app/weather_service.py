@@ -247,7 +247,7 @@ def obter_dados_climaticos(
 def obter_dados_climaticos_dict(
     lat: float = BUEIRO_LATITUDE,
     lon: float = BUEIRO_LONGITUDE,
-) -> dict:
+) -> dict[str, float | str | bool]:
     """Versão dict dos dados climáticos — útil para endpoints REST."""
     dados = obter_dados_climaticos(lat, lon)
     return {

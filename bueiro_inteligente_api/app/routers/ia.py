@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-from .. import schemas
+from .. import models, schemas
 from ..database import get_db
 from ..repositories.previsoes import PrevisaoRepository
 from ..ai_predictor import PrevisorEntupimentoIA
@@ -30,7 +30,7 @@ def obter_previsao_atual(
     lat: float = BUEIRO_LATITUDE,
     lon: float = BUEIRO_LONGITUDE,
     db: Session = Depends(get_db),
-):
+) -> schemas.AnaliseIAResult:
     """
     Executa o motor de IA multivariado sobre as leituras recentes do sensor
     e todas as fontes de dados disponíveis (clima, temporal, geográfico, etc.).
@@ -42,14 +42,18 @@ def obter_previsao_atual(
     )
 
 @router.get("/historico-previsoes", response_model=list[schemas.PrevisaoEntupimentoOut])
-def listar_historico_previsoes(db: Session = Depends(get_db)):
+def listar_historico_previsoes(
+    db: Session = Depends(get_db),
+) -> list[models.PrevisaoEntupimento]:
     """
     Retorna o histórico das previsões de entupimento geradas pela IA e armazenadas no MySQL.
     """
     return PrevisaoRepository(db).listar_historico()
 
-@router.post("/simular-cenario")
-def simular_cenario_chuva(cenario: schemas.CenarioSimulacaoRequest):
+@router.post("/simular-cenario", response_model=None)
+def simular_cenario_chuva(
+    cenario: schemas.CenarioSimulacaoRequest,
+) -> dict[str, object]:
     """
     Simula uma projeção matemática/IA de elevação de água em caso de chuva intensa,
     útil para demonstração visual na banca de TCC.
@@ -64,7 +68,7 @@ def obter_previsao_ml(
     lat: float = BUEIRO_LATITUDE,
     lon: float = BUEIRO_LONGITUDE,
     db: Session = Depends(get_db),
-):
+) -> schemas.AnaliseIAMLResult:
     """
     Previsão via Machine Learning (scikit-learn, DecisionTreeClassifier),
     treinado sobre dataset sintético — complementar ao /ia/previsao
@@ -73,7 +77,9 @@ def obter_previsao_ml(
     return PrevisorEntupimentoML.prever(db=db, id_sensor=id_sensor, persistir=persistir)
 
 @router.post("/treinar-modelo-ml", response_model=schemas.TreinoMLResult)
-def treinar_modelo_ml(n_amostras: int = ML_N_AMOSTRAS):
+def treinar_modelo_ml(
+    n_amostras: int = ML_N_AMOSTRAS,
+) -> dict[str, object]:
     """
     Re-treina o modelo de ML sobre um novo dataset sintético. Útil para
     demonstrar o pipeline de treino/avaliação na banca de TCC.
@@ -87,7 +93,7 @@ def comparar_motores_ia(
     lat: float = BUEIRO_LATITUDE,
     lon: float = BUEIRO_LONGITUDE,
     db: Session = Depends(get_db),
-):
+) -> schemas.ComparativoIAResult:
     """
     Executa os dois motores de previsão (regressão/tendência temporal e
     Machine Learning via scikit-learn) sobre as mesmas leituras recentes
@@ -107,11 +113,11 @@ def comparar_motores_ia(
 # NOVOS ENDPOINTS
 # ═══════════════════════════════════════════════════════════════════
 
-@router.get("/clima-atual")
+@router.get("/clima-atual", response_model=None)
 def obter_clima_atual(
     lat: float = BUEIRO_LATITUDE,
     lon: float = BUEIRO_LONGITUDE,
-):
+) -> dict[str, float | str | bool]:
     """
     Consulta os dados climáticos atuais via OpenWeatherMap.
     Retorna precipitação, umidade, vento, previsão de chuva e descrição.
@@ -123,11 +129,11 @@ def obter_clima_atual(
     )
 
 
-@router.get("/topografia-atual")
+@router.get("/topografia-atual", response_model=None)
 def obter_topografia_atual(
     lat: float = BUEIRO_LATITUDE,
     lon: float = BUEIRO_LONGITUDE,
-):
+) -> dict[str, object]:
     """
     Consulta os dados topográficos atuais via OpenTopography (Copernicus DEM GLO-30)
     ou provider local configurado. Retorna altitude, declividade, classificação de risco
@@ -136,8 +142,8 @@ def obter_topografia_atual(
     return obter_topografia_atual_service(lat, lon)
 
 
-@router.get("/fontes-dados")
-def listar_fontes_dados():
+@router.get("/fontes-dados", response_model=None)
+def listar_fontes_dados() -> dict[str, object]:
     """
     Lista quais fontes de dados estão ativas/carregadas no sistema.
     Útil para diagnóstico e verificação da configuração.

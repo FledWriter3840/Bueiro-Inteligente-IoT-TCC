@@ -12,11 +12,13 @@ class RecordRepository(Protocol[ModelT]):
 
 
 class SQLAlchemyRecordRepository(Generic[ModelT]):
-    def __init__(self, session: Session, model: type[ModelT]):
+    def __init__(self, session: Session, model: type[ModelT]) -> None:
+        """Associa uma sessão e o modelo persistido pelo repositório."""
         self.session = session
         self.model = model
 
     def create(self, values: dict[str, Any]) -> ModelT:
+        """Insere e retorna um registro, revertendo a transação em falhas."""
         record = self.model(**values)
         try:
             self.session.add(record)
@@ -28,6 +30,7 @@ class SQLAlchemyRecordRepository(Generic[ModelT]):
         return record
 
     def list_recent(self) -> list[ModelT]:
+        """Lista os registros ordenados pela data mais recente."""
         timestamp = getattr(self.model, "data_hora")
         return (
             self.session.query(self.model)

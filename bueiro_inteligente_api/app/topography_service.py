@@ -17,7 +17,7 @@ from __future__ import annotations
 import json
 import logging
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
@@ -73,7 +73,8 @@ class PerfilTopograficoAPI:
 class TopografiaService:
     """Gerencia consultas ao OpenTopography com cache em memória e em disco."""
 
-    def __init__(self):
+    def __init__(self) -> None:
+        """Inicializa o cache topográfico e carrega os dados persistidos."""
         self._cache: dict[str, float] = {}
         self._carregar_cache_disco()
 

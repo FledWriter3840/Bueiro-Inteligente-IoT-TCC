@@ -11,7 +11,10 @@ router = APIRouter(
 )
 
 @router.post("/leitura", response_model=schemas.LeituraSensorOut)
-def registrar_leitura(leitura: schemas.LeituraSensorCreate, db: Session = Depends(get_db)):
+def registrar_leitura(
+    leitura: schemas.LeituraSensorCreate,
+    db: Session = Depends(get_db),
+) -> dict[str, object]:
     """
     Registra uma nova leitura de sensor no banco de dados e executa a IA preditiva.
     """
@@ -19,7 +22,7 @@ def registrar_leitura(leitura: schemas.LeituraSensorCreate, db: Session = Depend
     return service.registrar_leitura(leitura)
 
 @router.get("/leituras", response_model=list[schemas.LeituraSensorOut])
-def listar_leituras(db: Session = Depends(get_db)):
+def listar_leituras(db: Session = Depends(get_db)) -> list[dict[str, object]]:
     """
     Lista todas as leituras de sensores registradas no banco de dados.
     """

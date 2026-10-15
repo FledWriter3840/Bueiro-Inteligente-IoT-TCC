@@ -14,6 +14,7 @@ class ExternalHttpClient:
         params: dict | None = None,
         headers: dict[str, str] | None = None,
     ) -> Any:
+        """Executa GET, valida o status HTTP e retorna o JSON."""
         resposta = requests.get(
             url,
             params=params,
@@ -31,6 +32,7 @@ class ExternalHttpClient:
         data: str,
         headers: dict[str, str] | None = None,
     ) -> Any:
+        """Executa POST, valida o status HTTP e retorna o JSON."""
         resposta = requests.post(
             url,
             data=data,

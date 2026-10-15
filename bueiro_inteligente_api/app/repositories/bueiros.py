@@ -7,10 +7,14 @@ class BueiroStorageError(Exception):
 
 
 class BueiroJsonRepository:
-    def __init__(self, path: Path):
+    """Persiste em JSON os bueiros adicionados ao inventário."""
+
+    def __init__(self, path: Path) -> None:
+        """Define o caminho do arquivo de persistência."""
         self.path = path
 
     def listar_adicionados(self) -> list[dict]:
+        """Carrega os registros de bueiros persistidos."""
         if not self.path.exists():
             return []
         try:
@@ -22,6 +26,7 @@ class BueiroJsonRepository:
         return registros if isinstance(registros, list) else []
 
     def adicionar(self, registro: dict) -> None:
+        """Adiciona um registro ao arquivo JSON."""
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             registros = self.listar_adicionados()

@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
+from typing import AsyncGenerator
 
 from .routers import sensores, alertas, limpeza, compactacao, historico, ia, bueiros
 from .dados_externos import inicializar_dados_externos
@@ -7,7 +8,8 @@ from .errors import register_exception_handlers
 from . import schemas
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    """Inicializa os provedores externos durante o ciclo de vida da API."""
     # Inicializa provedores de datasets externos configurados via .env
     inicializar_dados_externos()
     yield
@@ -29,5 +31,6 @@ app.include_router(ia.router)
 app.include_router(bueiros.router)
 
 @app.get("/", response_model=schemas.HealthOut)
-def root():
+def root() -> dict[str, str]:
+    """Informa que a API está disponível."""
     return {"message": "API do bueiro inteligente rodando"}

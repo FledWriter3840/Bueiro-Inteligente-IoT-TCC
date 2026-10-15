@@ -16,14 +16,17 @@ SAC_COORDINATE_TRANSFORMER = Transformer.from_crs(
 class InventarioBueirosRepository:
     """Carrega os inventários geográficos mantidos em arquivos."""
 
-    def __init__(self, inventario_path: Path, sac_path: Path):
+    def __init__(self, inventario_path: Path, sac_path: Path) -> None:
+        """Define os caminhos dos arquivos de inventário e SAC."""
         self.inventario_path = inventario_path
         self.sac_path = sac_path
 
     def carregar_inventario(self) -> tuple[dict, ...]:
+        """Carrega os bueiros do inventário geográfico."""
         return _carregar_inventario(str(self.inventario_path))
 
     def carregar_solicitacoes_sac(self) -> tuple[dict, ...]:
+        """Carrega solicitações SAC com coordenadas geográficas."""
         return _carregar_solicitacoes_sac(str(self.sac_path))
 
 

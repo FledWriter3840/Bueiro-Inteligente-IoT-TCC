@@ -11,11 +11,13 @@ router = APIRouter(
 def registrar_limpeza(
     limpeza: schemas.LimpezaCreate,
     service: RecordService[models.Limpeza] = Depends(get_limpeza_service),
-):
+) -> models.Limpeza:
+    """Registra uma operação de limpeza."""
     return service.create(limpeza)
 
 @router.get("/", response_model=list[schemas.LimpezaOut])
 def listar_limpezas(
     service: RecordService[models.Limpeza] = Depends(get_limpeza_service),
-):
+) -> list[models.Limpeza]:
+    """Lista as operações de limpeza registradas."""
     return service.list_recent()

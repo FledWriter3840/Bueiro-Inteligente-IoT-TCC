@@ -11,11 +11,13 @@ router = APIRouter(
 def registrar_alerta(
     alerta: schemas.AlertaCreate,
     service: RecordService[models.Alerta] = Depends(get_alerta_service),
-):
+) -> models.Alerta:
+    """Registra um novo alerta."""
     return service.create(alerta)
 
 @router.get("/", response_model=list[schemas.AlertaOut])
 def listar_alertas(
     service: RecordService[models.Alerta] = Depends(get_alerta_service),
-):
+) -> list[models.Alerta]:
+    """Lista os alertas registrados."""
     return service.list_recent()

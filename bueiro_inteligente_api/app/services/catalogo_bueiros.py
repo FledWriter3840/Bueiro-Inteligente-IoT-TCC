@@ -13,14 +13,17 @@ class CatalogoBueirosService:
         self,
         repository: InventarioBueirosRepository,
         bueiro_service: BueiroService,
-    ):
+    ) -> None:
+        """Inicializa as fontes do inventário e dos cadastros locais."""
         self.repository = repository
         self.bueiro_service = bueiro_service
 
-    def cadastrar(self, bueiro: BueiroCreate) -> dict:
+    def cadastrar(self, bueiro: BueiroCreate) -> dict[str, object]:
+        """Cadastra um bueiro por meio do serviço de persistência."""
         return self.bueiro_service.cadastrar(bueiro)
 
     def listar_rodovias(self) -> list[str]:
+        """Lista rodovias distintas do inventário e dos cadastros."""
         inventario = self._inventario_com_cadastros()
         return sorted({
             bueiro["rodovia"]
@@ -28,7 +31,11 @@ class CatalogoBueirosService:
             if bueiro["rodovia"]
         })
 
-    def listar_bueiros(self, rodovia: str | None = None) -> list[dict]:
+    def listar_bueiros(
+        self,
+        rodovia: str | None = None,
+    ) -> list[dict[str, object]]:
+        """Lista bueiros, opcionalmente filtrados por rodovia."""
         inventario = self._inventario_com_cadastros()
         if rodovia:
             inventario = tuple(
@@ -44,7 +51,8 @@ class CatalogoBueirosService:
             ),
         )
 
-    def listar_locais_sac(self) -> list[dict]:
+    def listar_locais_sac(self) -> list[dict[str, object]]:
+        """Agrupa as solicitações SAC por localização."""
         locais = {}
         for solicitacao in self.repository.carregar_solicitacoes_sac():
             chave = (
@@ -77,7 +85,8 @@ class CatalogoBueirosService:
         lon: float,
         raio_m: int,
         limite: int,
-    ) -> dict:
+    ) -> dict[str, object]:
+        """Resume as solicitações SAC dentro do raio informado."""
         proximas = []
         for solicitacao in self.repository.carregar_solicitacoes_sac():
             distancia = _distancia_metros(

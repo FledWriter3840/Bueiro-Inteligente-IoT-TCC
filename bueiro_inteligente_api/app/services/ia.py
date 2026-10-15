@@ -9,7 +9,9 @@ from ..ml.predictor import PrevisorEntupimentoML
 from ..weather_service import obter_dados_climaticos_dict
 
 
-def simular_cenario_chuva(cenario: schemas.CenarioSimulacaoRequest) -> dict:
+def simular_cenario_chuva(
+    cenario: schemas.CenarioSimulacaoRequest,
+) -> dict[str, object]:
     """Gera projeções de risco para o cenário informado."""
     projecoes = []
     for minuto in range(cenario.minutos_simulacao + 1):
@@ -92,7 +94,7 @@ def comparar_motores_ia(
     )
 
 
-def obter_topografia_atual(lat: float, lon: float) -> dict:
+def obter_topografia_atual(lat: float, lon: float) -> dict[str, object]:
     """Converte o perfil topográfico para o contrato da API."""
     from ..topography_service import topografia_service
 
@@ -110,7 +112,7 @@ def obter_topografia_atual(lat: float, lon: float) -> dict:
     }
 
 
-def listar_fontes_dados() -> dict:
+def listar_fontes_dados() -> dict[str, object]:
     """Resume disponibilidade das seis fontes de dados da análise."""
     perfil_solo = uso_do_solo.obter_perfil(
         lat=BUEIRO_LATITUDE,

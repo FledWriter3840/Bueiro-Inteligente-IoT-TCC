@@ -37,7 +37,7 @@ def montar_resposta_leitura(
     acionar_limpeza: bool,
     tempo_limpeza_segundos: int,
     recomendacao_limpeza: str,
-) -> dict:
+) -> dict[str, object]:
     """Monta o payload existente retornado ao firmware."""
     return {
         "id_sensor": leitura.id_sensor,
@@ -60,13 +60,13 @@ def montar_resposta_leitura(
 class LeituraService:
     """Orquestra registro, predição e resposta de uma leitura do sensor."""
 
-    def __init__(self, repository: LeituraRepository):
+    def __init__(self, repository: LeituraRepository) -> None:
         self.repository = repository
 
     def registrar_leitura(
         self,
         leitura: schemas.LeituraSensorCreate,
-    ) -> dict:
+    ) -> dict[str, object]:
         """Persiste uma leitura e produz a decisão de limpeza."""
         registro = self.repository.criar_leitura(leitura)
         agora = datetime.now(timezone.utc).replace(tzinfo=None)
@@ -118,7 +118,7 @@ class LeituraService:
             ),
         )
 
-    def listar_leituras(self) -> list[dict]:
+    def listar_leituras(self) -> list[dict[str, object]]:
         """Lista leituras com a previsão mais recente associada."""
         leituras = self.repository.listar_leituras()
         if not leituras:

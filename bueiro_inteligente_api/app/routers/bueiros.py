@@ -23,10 +23,12 @@ ADICOES_PATH = (
 
 
 def get_bueiro_service() -> BueiroService:
+    """Cria o serviço de cadastro de bueiros."""
     return BueiroService(BueiroJsonRepository(ADICOES_PATH))
 
 
 def get_catalogo_service() -> CatalogoBueirosService:
+    """Cria o serviço de consulta ao inventário e aos dados SAC."""
     return CatalogoBueirosService(
         repository=InventarioBueirosRepository(CSV_PATH, SAC_CSV_PATH),
         bueiro_service=get_bueiro_service(),
@@ -41,7 +43,7 @@ def _erro_armazenamento(exc: BueiroStorageError) -> HTTPException:
 def cadastrar_bueiro(
     novo_bueiro: schemas.BueiroCreate,
     service: BueiroService = Depends(get_bueiro_service),
-):
+) -> dict[str, object]:
     """Persiste um bueiro novo sem alterar o CSV de inventário original."""
     try:
         return service.cadastrar(novo_bueiro)
@@ -52,7 +54,7 @@ def cadastrar_bueiro(
 @router.get("/rodovias", response_model=list[str])
 def listar_rodovias(
     service: CatalogoBueirosService = Depends(get_catalogo_service),
-):
+) -> list[str]:
     """Lista as rodovias disponíveis no inventário."""
     try:
         return service.listar_rodovias()
@@ -64,7 +66,7 @@ def listar_rodovias(
 def listar_bueiros(
     rodovia: str | None = Query(default=None),
     service: CatalogoBueirosService = Depends(get_catalogo_service),
-):
+) -> list[dict[str, object]]:
     """Lista os bueiros do inventário, opcionalmente filtrados por rodovia."""
     try:
         return service.listar_bueiros(rodovia)
@@ -75,7 +77,7 @@ def listar_bueiros(
 @router.get("/locais-sac", response_model=list[schemas.LocalSACOut])
 def listar_locais_sac(
     service: CatalogoBueirosService = Depends(get_catalogo_service),
-):
+) -> list[dict[str, object]]:
     """Lista locais únicos com solicitações SAC."""
     return service.listar_locais_sac()
 
@@ -87,6 +89,6 @@ def listar_solicitacoes_limpeza_proximas(
     raio_m: int = Query(default=500, ge=100, le=5000),
     limite: int = Query(default=1000, ge=1, le=5000),
     service: CatalogoBueirosService = Depends(get_catalogo_service),
-):
+) -> dict[str, object]:
     """Busca solicitações SAC próximas à localização informada."""
     return service.listar_solicitacoes_proximas(lat, lon, raio_m, limite)

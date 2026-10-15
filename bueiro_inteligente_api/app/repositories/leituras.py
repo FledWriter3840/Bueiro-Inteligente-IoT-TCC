@@ -9,13 +9,16 @@ from ..config import JANELA_LIMPEZA_MINUTOS
 class LeituraRepository:
     """Encapsula consultas e persistência do fluxo de leituras."""
 
-    def __init__(self, session: Session):
+    def __init__(self, session: Session) -> None:
+        """Associa a sessão usada nas consultas e gravações."""
         self.session = session
 
     def rollback(self) -> None:
+        """Reverte a transação atual."""
         self.session.rollback()
 
     def criar_leitura(self, leitura: schemas.LeituraSensorCreate) -> models.LeituraSensor:
+        """Persiste uma leitura e retorna o registro atualizado."""
         registro = models.LeituraSensor(
             valor_leitura=leitura.valor_leitura,
             unidade_medida=leitura.unidade_medida,
@@ -35,6 +38,7 @@ class LeituraRepository:
         agora: datetime,
         janela_minutos: int = JANELA_LIMPEZA_MINUTOS,
     ) -> bool:
+        """Verifica se houve limpeza dentro da janela configurada."""
         limite = agora - timedelta(minutes=janela_minutos)
         return (
             self.session.query(models.Limpeza)
@@ -44,6 +48,7 @@ class LeituraRepository:
         )
 
     def registrar_limpeza_automatica(self, risco: str) -> models.Limpeza:
+        """Registra a limpeza automática associada ao risco."""
         limpeza = models.Limpeza(status_limpeza=f"Auto ({risco})"[:20])
         try:
             self.session.add(limpeza)
@@ -54,6 +59,7 @@ class LeituraRepository:
         return limpeza
 
     def listar_leituras(self) -> list[models.LeituraSensor]:
+        """Lista leituras da mais recente para a mais antiga."""
         return (
             self.session.query(models.LeituraSensor)
             .order_by(models.LeituraSensor.data_hora.desc())
@@ -64,6 +70,7 @@ class LeituraRepository:
         self,
         ids_leituras: list[int],
     ) -> list[models.PrevisaoEntupimento]:
+        """Busca previsões relacionadas às leituras indicadas."""
         return (
             self.session.query(models.PrevisaoEntupimento)
             .filter(models.PrevisaoEntupimento.id_leitura.in_(ids_leituras))
