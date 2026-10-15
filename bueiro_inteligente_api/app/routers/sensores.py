@@ -3,7 +3,13 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from .. import models, schemas
+from ..config import (
+    JANELA_LIMPEZA_MINUTOS,
+    PRIORIDADE_NIVEL_RISCO,
+    TEMPOS_LIMPEZA_POR_RISCO,
+)
 from ..database import get_db
+from ..enums import NivelRisco
 
 from ..ai_predictor import PrevisorEntupimentoIA
 from ..ml.predictor import PrevisorEntupimentoML
@@ -31,7 +37,8 @@ def registrar_leitura(leitura: schemas.LeituraSensorCreate, db: Session = Depend
     resultado_ia = None
     resultado_ml = None
     limpeza_recente = db.query(models.Limpeza).filter(
-        models.Limpeza.data_hora >= datetime.utcnow() - timedelta(minutes=5)
+        models.Limpeza.data_hora
+        >= datetime.utcnow() - timedelta(minutes=JANELA_LIMPEZA_MINUTOS)
     ).first()
     try:
         resultado_ia = PrevisorEntupimentoIA.analisar_e_prever(
@@ -47,22 +54,16 @@ def registrar_leitura(leitura: schemas.LeituraSensorCreate, db: Session = Depend
     except Exception as e:
         print(f"Aviso: Falha ao executar preditor de IA: {e}")
 
-    severidade = {"Baixo": 0, "Médio": 1, "Alto": 2, "Crítico": 3}
-    risco_multivariado = resultado_ia.nivel_risco if resultado_ia else "Baixo"
-    risco_ml = resultado_ml.nivel_risco if resultado_ml else "Baixo"
+    risco_multivariado = (
+        resultado_ia.nivel_risco if resultado_ia else NivelRisco.BAIXO.value
+    )
+    risco_ml = resultado_ml.nivel_risco if resultado_ml else NivelRisco.BAIXO.value
     nivel_risco_decisao = max(
         (risco_multivariado, risco_ml),
-        key=lambda risco: severidade.get(risco, 0),
+        key=lambda risco: PRIORIDADE_NIVEL_RISCO.get(risco, 0),
     )
 
-    tempos_limpeza = {
-        "Baixo": 0,
-        "Médio": 5,
-        "Alto": 10,
-        "Emergência": 15,
-        "Crítico": 15,
-    }
-    tempo_limpeza = tempos_limpeza.get(nivel_risco_decisao, 0)
+    tempo_limpeza = TEMPOS_LIMPEZA_POR_RISCO.get(nivel_risco_decisao, 0)
     deve_acionar = bool(tempo_limpeza and not limpeza_recente)
 
     if deve_acionar:

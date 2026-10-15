@@ -5,6 +5,7 @@ import pandas as pd
 from sqlalchemy.orm import Session
 
 from .. import models, schemas
+from ..enums import NivelRisco
 from .train import MODELO_PATH, FEATURES, treinar_modelo
 
 
@@ -71,7 +72,7 @@ class PrevisorEntupimentoML:
 
         if features is None:
             return schemas.AnaliseIAMLResult(
-                nivel_risco="Baixo",
+                nivel_risco=NivelRisco.BAIXO.value,
                 probabilidade_classe=0.0,
                 classes_probabilidades={},
                 distancia_atual_cm=400.0,

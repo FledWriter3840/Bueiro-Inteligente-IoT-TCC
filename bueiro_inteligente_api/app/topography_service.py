@@ -29,6 +29,7 @@ from .config import (
     BUEIRO_LATITUDE,
     BUEIRO_LONGITUDE,
 )
+from .enums import NivelRisco
 
 logger = logging.getLogger(__name__)
 
@@ -222,16 +223,16 @@ class TopografiaService:
             classificacao = "Muito Alto"
             detalhes = f"Fundo de vale com drenagem lenta (declividade suave {declividade_pct:.1f}%). Água converge e tende a acumular."
         elif eh_fundo_de_vale:
-            classificacao = "Alto"
+            classificacao = NivelRisco.ALTO.value
             detalhes = f"Ponto de convergência hidrológica (fundo de vale), cota {alt_centro:.1f}m."
         elif abs(declividade_pct) > 8.0:
-            classificacao = "Alto"
+            classificacao = NivelRisco.ALTO.value
             detalhes = f"Declividade acentuada ({declividade_pct:.1f}%). Risco elevado de enxurrada rápida com arraste de detritos para a boca de lobo."
         elif abs(declividade_pct) > 3.0:
-            classificacao = "Médio"
+            classificacao = NivelRisco.MEDIO.value
             detalhes = f"Declividade moderada ({declividade_pct:.1f}%). Escoamento superficial ativo."
         else:
-            classificacao = "Baixo"
+            classificacao = NivelRisco.BAIXO.value
             detalhes = f"Terreno plano em cota estável ({alt_centro:.1f}m)."
 
         return PerfilTopograficoAPI(

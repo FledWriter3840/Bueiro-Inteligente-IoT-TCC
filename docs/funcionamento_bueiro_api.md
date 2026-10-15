@@ -181,6 +181,8 @@ Existe tambem uma protecao local no firmware: se a distancia for menor que `15 c
 
 A API aplica um intervalo de seguranca de 5 minutos entre ciclos automaticos para evitar acionamentos repetidos a cada leitura.
 
+O limiar, a janela de acionamento e os tempos por nivel de risco do backend estao centralizados em `bueiro_inteligente_api/app/config.py`; os niveis operacionais estao definidos em `bueiro_inteligente_api/app/enums.py`. O backend considera critico o valor igual ou inferior a 15 cm, enquanto a protecao local do firmware usa valor estritamente inferior a 15 cm.
+
 ## 7. Funcionamento fisico
 
 No prototipo:

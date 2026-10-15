@@ -27,6 +27,8 @@ from . import models, schemas
 from .config import (
     BUEIRO_LATITUDE,
     BUEIRO_LONGITUDE,
+    JANELA_LIMPEZA_MINUTOS,
+    LIMIAR_CRITICO_CM,
     PESO_SENSOR,
     PESO_CLIMA,
     PESO_TEMPORAL,
@@ -34,6 +36,7 @@ from .config import (
     PESO_GEOGRAFICO,
     PESO_USO_SOLO,
 )
+from .enums import NivelRisco
 from .weather_service import obter_dados_climaticos, DadosClimaticos
 from .dados_temporais import extrair_dados_temporais, DadosTemporais
 from .dados_externos import (
@@ -83,7 +86,7 @@ class PrevisorEntupimentoIA:
         if not leituras:
             return schemas.AnaliseIAResult(
                 probabilidade_entupimento=0.0,
-                nivel_risco="Baixo",
+                nivel_risco=NivelRisco.BAIXO.value,
                 tendencia="Sem dados suficientes",
                 taxa_variacao_cm_min=0.0,
                 distancia_atual_cm=400.0,
@@ -185,8 +188,10 @@ class PrevisorEntupimentoIA:
         # ═══════════════════════════════════════════════════════════
 
         tempo_transbordo = None
-        if taxa_subida_cm_min > 0.5 and distancia_atual > 15.0:
-            tempo_transbordo = round((distancia_atual - 15.0) / taxa_subida_cm_min, 1)
+        if taxa_subida_cm_min > 0.5 and distancia_atual > LIMIAR_CRITICO_CM:
+            tempo_transbordo = round(
+                (distancia_atual - LIMIAR_CRITICO_CM) / taxa_subida_cm_min, 1
+            )
 
         # ═══════════════════════════════════════════════════════════
         # FONTES DE DADOS UTILIZADAS
@@ -226,27 +231,27 @@ class PrevisorEntupimentoIA:
         if persistir:
             nova_previsao = models.PrevisaoEntupimento(
                 probabilidade=round(probabilidade, 2),
-                nivel_risco=nivel_risco,
+                nivel_risco=nivel_risco.value,
                 id_leitura=leitura_mais_recente.id_leitura,
             )
             db.add(nova_previsao)
 
             # Dispara alerta se risco for Alto ou Crítico
             # (evita alertas duplicados nos últimos 2 min)
-            if nivel_risco in ["Alto", "Crítico"]:
+            if nivel_risco in (NivelRisco.ALTO, NivelRisco.CRITICO):
                 dois_minutos_atras = agora - timedelta(minutes=2)
                 alerta_recente = db.query(models.Alerta)\
                                    .filter(models.Alerta.data_hora >= dois_minutos_atras)\
                                    .first()
                 if not alerta_recente:
                     desc_alerta = (
-                        f"IA Multivariada: {nivel_risco.upper()} risco "
+                        f"IA Multivariada: {nivel_risco.value.upper()} risco "
                         f"(Prob: {int(probabilidade * 100)}%). "
                         f"Limpeza: {urgencia_limpeza}. {recomendacao}"
                     )
                     novo_alerta = models.Alerta(
                         descricao=desc_alerta,
-                        nivel_criticidade=nivel_risco,
+                        nivel_criticidade=nivel_risco.value,
                         id_leitura=leitura_mais_recente.id_leitura,
                     )
                     db.add(novo_alerta)
@@ -254,7 +259,9 @@ class PrevisorEntupimentoIA:
 
             # Registra ciclo de limpeza e compactação automática se for Urgente/Emergência
             if urgencia_limpeza in ["Urgente", "Emergência"]:
-                cinco_minutos_atras = agora - timedelta(minutes=5)
+                cinco_minutos_atras = agora - timedelta(
+                    minutes=JANELA_LIMPEZA_MINUTOS
+                )
                 limpeza_recente = db.query(models.Limpeza)\
                                     .filter(models.Limpeza.data_hora >= cinco_minutos_atras)\
                                     .first()
@@ -272,7 +279,7 @@ class PrevisorEntupimentoIA:
 
         return schemas.AnaliseIAResult(
             probabilidade_entupimento=round(probabilidade, 2),
-            nivel_risco=nivel_risco,
+            nivel_risco=nivel_risco.value,
             tendencia=tendencia,
             taxa_variacao_cm_min=round(taxa_subida_cm_min, 2),
             distancia_atual_cm=round(distancia_atual, 2),
@@ -353,7 +360,7 @@ def _calcular_score_sensor(
     - Nível de resíduo da compactação
     """
     # Base pela distância (mesma lógica do motor original)
-    if distancia_atual <= 15.0:
+    if distancia_atual <= LIMIAR_CRITICO_CM:
         score_dist = 0.95
     elif distancia_atual <= 30.0:
         score_dist = 0.75
@@ -582,29 +589,29 @@ def _calcular_score_uso_solo(perfil: PerfilUsoSolo) -> float:
 def _classificar_risco(
     probabilidade: float,
     distancia_atual: float,
-) -> tuple[str, str]:
+) -> tuple[NivelRisco, str]:
     """Classifica o nível de risco e gera a recomendação operacional do bueiro."""
-    if probabilidade >= 0.80 or distancia_atual <= 15.0:
+    if probabilidade >= 0.80 or distancia_atual <= LIMIAR_CRITICO_CM:
         return (
-            "Crítico",
+            NivelRisco.CRITICO,
             "ACIONAR CICLO DE LIMPEZA E COMPACTADOR IMEDIATAMENTE! "
             "Risco iminente de transbordo pluvial. Ejetar resíduos para o compartimento coletor e iniciar esmagamento.",
         )
     elif probabilidade >= 0.60:
         return (
-            "Alto",
+            NivelRisco.ALTO,
             "Nível elevado de detritos/água detectado. "
             "Iniciar ciclo de transferência de resíduos e acionar compactador preventivamente.",
         )
     elif probabilidade >= 0.35:
         return (
-            "Médio",
+            NivelRisco.MEDIO,
             "Volume moderado de água/resíduos em ascensão. "
             "Manter sistema em prontidão para acionamento do mecanismo de limpeza e compactação.",
         )
     else:
         return (
-            "Baixo",
+            NivelRisco.BAIXO,
             "Bueiro com fluxo desobstruído. Mecanismo de compactação em espera operacional.",
         )
 
@@ -627,7 +634,7 @@ def _recomendar_limpeza(
     """
 
     # ── EMERGÊNCIA: Transbordo iminente — acionar mecanismo agora ─
-    if probabilidade >= 0.80 or distancia_atual <= 15.0:
+    if probabilidade >= 0.80 or distancia_atual <= LIMIAR_CRITICO_CM:
         alerta_recipiente = " ATENÇÃO: Recipiente compactador em alta ocupação!" if nivel_residuo_pct >= 75.0 else ""
         return (
             "Emergência",

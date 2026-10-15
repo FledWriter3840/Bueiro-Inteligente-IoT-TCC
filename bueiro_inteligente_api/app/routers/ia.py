@@ -7,7 +7,13 @@ from ..ml.predictor import PrevisorEntupimentoML
 from ..ml.train import treinar_modelo as treinar_modelo_ml_fn
 from ..weather_service import obter_dados_climaticos_dict
 from ..dados_externos import historico_alagamentos, dados_geograficos, uso_do_solo
-from ..config import BUEIRO_LATITUDE, BUEIRO_LONGITUDE
+from ..config import (
+    BUEIRO_LATITUDE,
+    BUEIRO_LONGITUDE,
+    LIMIAR_CRITICO_CM,
+    ML_N_AMOSTRAS,
+)
+from ..enums import NivelRisco
 from datetime import datetime
 
 router = APIRouter(
@@ -56,24 +62,24 @@ def simular_cenario_chuva(cenario: schemas.CenarioSimulacaoRequest):
         distancia_min = max(0.0, distancia - (taxa * minuto))
         
         # Avalia risco instantâneo
-        if distancia_min <= 15.0:
+        if distancia_min <= LIMIAR_CRITICO_CM:
             prob = 0.95
-            risco = "Crítico"
+            risco = NivelRisco.CRITICO
         elif distancia_min <= 50.0:
             prob = 0.75
-            risco = "Alto"
+            risco = NivelRisco.ALTO
         elif distancia_min <= 150.0:
             prob = 0.45
-            risco = "Médio"
+            risco = NivelRisco.MEDIO
         else:
             prob = 0.15
-            risco = "Baixo"
+            risco = NivelRisco.BAIXO
 
         projecoes.append({
             "minuto": minuto,
             "distancia_prevista_cm": round(distancia_min, 1),
             "probabilidade_alagamento": prob,
-            "nivel_risco": risco
+            "nivel_risco": risco.value
         })
 
     return {
@@ -102,7 +108,7 @@ def obter_previsao_ml(
     return PrevisorEntupimentoML.prever(db=db, id_sensor=id_sensor, persistir=persistir)
 
 @router.post("/treinar-modelo-ml", response_model=schemas.TreinoMLResult)
-def treinar_modelo_ml(n_amostras: int = 3000):
+def treinar_modelo_ml(n_amostras: int = ML_N_AMOSTRAS):
     """
     Re-treina o modelo de ML sobre um novo dataset sintético. Útil para
     demonstrar o pipeline de treino/avaliação na banca de TCC.

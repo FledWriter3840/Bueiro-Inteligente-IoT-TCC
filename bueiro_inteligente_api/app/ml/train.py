@@ -5,6 +5,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 
+from ..config import ML_MAX_DEPTH, ML_N_AMOSTRAS, ML_RANDOM_STATE, ML_TEST_SIZE
 from .dataset import gerar_dataset_sintetico
 
 MODELO_PATH = Path(__file__).parent / "modelo_risco.joblib"
@@ -12,7 +13,7 @@ FEATURES = ["distancia_atual_cm", "taxa_subida_cm_min", "media_movel_3_cm"]
 LABEL = "nivel_risco"
 
 
-def treinar_modelo(n_amostras: int = 3000, salvar: bool = True) -> dict:
+def treinar_modelo(n_amostras: int = ML_N_AMOSTRAS, salvar: bool = True) -> dict:
     """
     Treina um classificador de Árvore de Decisão sobre o dataset sintético
     de leituras do sensor, prevendo o nível de risco de entupimento.
@@ -26,10 +27,17 @@ def treinar_modelo(n_amostras: int = 3000, salvar: bool = True) -> dict:
     y = df[LABEL]
 
     X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42, stratify=y
+        X,
+        y,
+        test_size=ML_TEST_SIZE,
+        random_state=ML_RANDOM_STATE,
+        stratify=y,
     )
 
-    modelo = DecisionTreeClassifier(max_depth=5, random_state=42)
+    modelo = DecisionTreeClassifier(
+        max_depth=ML_MAX_DEPTH,
+        random_state=ML_RANDOM_STATE,
+    )
     modelo.fit(X_train, y_train)
 
     y_pred = modelo.predict(X_test)

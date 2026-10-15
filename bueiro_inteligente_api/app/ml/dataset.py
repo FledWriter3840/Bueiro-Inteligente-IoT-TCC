@@ -1,10 +1,14 @@
 import numpy as np
 import pandas as pd
 
+from ..config import LIMIAR_CRITICO_CM, ML_N_AMOSTRAS, ML_RANDOM_STATE
+from ..enums import NivelRisco
+
+
 def _score_probabilistico(distancia_atual: float, taxa_subida: float) -> float:
     """Reaproveita a mesma lógica de regras do motor de regressão
     (app/ai_predictor.py) para gerar rótulos consistentes no dataset sintético."""
-    if distancia_atual <= 15.0:
+    if distancia_atual <= LIMIAR_CRITICO_CM:
         score_base = 0.85
     elif distancia_atual <= 30.0:
         score_base = 0.65
@@ -30,16 +34,19 @@ def _score_probabilistico(distancia_atual: float, taxa_subida: float) -> float:
 
 
 def _classificar_risco(probabilidade: float, distancia_atual: float) -> str:
-    if probabilidade >= 0.80 or distancia_atual <= 15.0:
-        return "Crítico"
+    if probabilidade >= 0.80 or distancia_atual <= LIMIAR_CRITICO_CM:
+        return NivelRisco.CRITICO.value
     elif probabilidade >= 0.60:
-        return "Alto"
+        return NivelRisco.ALTO.value
     elif probabilidade >= 0.35:
-        return "Médio"
-    return "Baixo"
+        return NivelRisco.MEDIO.value
+    return NivelRisco.BAIXO.value
 
 
-def gerar_dataset_sintetico(n_amostras: int = 3000, seed: int = 42) -> pd.DataFrame:
+def gerar_dataset_sintetico(
+    n_amostras: int = ML_N_AMOSTRAS,
+    seed: int = ML_RANDOM_STATE,
+) -> pd.DataFrame:
     """
     Gera um dataset SINTÉTICO de cenários de leitura do sensor ultrassônico,
     baseado nas mesmas regras de domínio usadas no motor de regressão

@@ -6,7 +6,34 @@ Carrega variáveis de ambiente do .env e expõe constantes globais.
 import os
 from dotenv import load_dotenv
 
+from .enums import NivelRisco
+
 load_dotenv()
+
+# ─────────────────────────────────────────────────────────────────
+# Operação e classificação de risco
+# ─────────────────────────────────────────────────────────────────
+LIMIAR_CRITICO_CM: float = 15.0
+JANELA_LIMPEZA_MINUTOS: int = 5
+PRIORIDADE_NIVEL_RISCO: dict[str, int] = {
+    NivelRisco.BAIXO.value: 0,
+    NivelRisco.MEDIO.value: 1,
+    NivelRisco.ALTO.value: 2,
+    NivelRisco.CRITICO.value: 3,
+}
+TEMPOS_LIMPEZA_POR_RISCO: dict[str, int] = {
+    NivelRisco.BAIXO.value: 0,
+    NivelRisco.MEDIO.value: 5,
+    NivelRisco.ALTO.value: 10,
+    "Emergência": 15,
+    NivelRisco.CRITICO.value: 15,
+}
+
+# Parâmetros do modelo de árvore de decisão e do dataset sintético.
+ML_N_AMOSTRAS: int = 3000
+ML_RANDOM_STATE: int = 42
+ML_TEST_SIZE: float = 0.2
+ML_MAX_DEPTH: int = 5
 
 # ─────────────────────────────────────────────────────────────────
 # OpenWeatherMap
