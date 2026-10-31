@@ -143,7 +143,7 @@ OpenWeatherMap, OpenTopography e Overpass usam a interface HTTP JSON comum em `a
 
 - OpenWeatherMap: cache em memoria por coordenadas, com TTL configurado por `OPENWEATHER_CACHE_TTL` (60 segundos por padrao). Sem chave ou em falha, retorna dados climaticos de fallback com `disponivel=False`; o fallback tambem fica em cache ate o TTL expirar.
 - OpenTopography: cache persistente em `topografia_cache.json`; sem chave, falha ou resposta sem elevacao, retorna o perfil conservador/indisponivel ja definido pelo servico.
-- Overpass: cache em memoria por coordenadas e raio, com TTL de 600 segundos. Em falha ou resposta sem elementos, usa o perfil local de uso do solo.
+- Overpass: cache em memoria por coordenadas e raio, com TTL de 600 segundos. Configurado por `OVERPASS_API_URL`, tenta `OVERPASS_API_URL_FALLBACK` quando a chamada principal falha; em falha nos dois endpoints ou resposta sem elementos, usa o perfil local de uso do solo.
 
 Os fallbacks mantem a operacao local disponivel, mas nao representam dados atuais dos provedores. A propriedade `disponivel` sinaliza quando um resultado vem de dados remotos.
 

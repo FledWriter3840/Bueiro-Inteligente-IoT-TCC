@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
-import { CircleMarker, MapContainer, Popup, TileLayer, useMap, ZoomControl } from 'react-leaflet'
+import { useEffect, useState, type CSSProperties } from 'react'
+import { Circle, CircleMarker, MapContainer, Popup, TileLayer, useMap, ZoomControl } from 'react-leaflet'
 import { apiRequest } from '../api'
-import type { Bueiro, SacSearch } from '../types'
+import type { Bueiro, Prediction, RiskLevel, SacSearch } from '../types'
 import type { Coordinates } from './LocationControls'
 
 type Props = { coordinates: Coordinates }
@@ -17,8 +17,28 @@ export function MapPanel({ coordinates }: Props) {
   const [road, setRoad] = useState('')
   const [bueiros, setBueiros] = useState<Bueiro[]>([])
   const [sac, setSac] = useState<SacSearch | null>(null)
+  const [prediction, setPrediction] = useState<Prediction | null>(null)
   const [radius, setRadius] = useState(500)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    let current = true
+    void apiRequest<Prediction>('/ia/previsao', {
+      params: { id_sensor: 1, lat: coordinates.lat, lon: coordinates.lon },
+      timeoutMs: 120000,
+    }).then((result) => {
+      if (current) {
+        setPrediction(result)
+        setError('')
+      }
+    }).catch((reason) => {
+      if (current) {
+        setPrediction(null)
+        setError(reason instanceof Error ? reason.message : 'Falha ao consultar previsão de entupimento.')
+      }
+    })
+    return () => { current = false }
+  }, [coordinates.lat, coordinates.lon])
 
   useEffect(() => {
     void apiRequest<string[]>('/bueiros/rodovias').then((data) => {
@@ -50,6 +70,13 @@ export function MapPanel({ coordinates }: Props) {
 
   const mapCenter: [number, number] = [coordinates.lat, coordinates.lon]
   const zoom = radius <= 500 ? 14 : radius <= 1500 ? 12 : 10
+  const riskColors: Record<RiskLevel, string> = {
+    Baixo: '#2f8a63',
+    'Médio': '#d2a321',
+    Alto: '#e77832',
+    'Crítico': '#c43d3d',
+  }
+  const riskColor = prediction ? riskColors[prediction.nivel_risco] : undefined
 
   return (
     <div className="map-workspace">
@@ -72,8 +99,23 @@ export function MapPanel({ coordinates }: Props) {
           />
           <MapRecenter center={mapCenter} zoom={zoom} />
           <ZoomControl position="bottomright" />
+          {prediction && riskColor && (
+            <Circle
+              center={mapCenter}
+              radius={radius}
+              pathOptions={{ color: riskColor, fillColor: riskColor, fillOpacity: 0.13, opacity: 0.9, weight: 3 }}
+            >
+              <Popup>
+                Região analisada · risco {prediction.nivel_risco}<br />
+                Probabilidade de entupimento: {(prediction.probabilidade_entupimento * 100).toFixed(0)}%
+              </Popup>
+            </Circle>
+          )}
           <CircleMarker center={mapCenter} radius={8} pathOptions={{ color: '#a74631', fillColor: '#d27655', fillOpacity: 0.95, weight: 3 }}>
-            <Popup>Local analisado<br />{coordinates.lat.toFixed(5)}, {coordinates.lon.toFixed(5)}</Popup>
+            <Popup>
+              Local analisado · {coordinates.lat.toFixed(5)}, {coordinates.lon.toFixed(5)}
+              {prediction && <><br />Risco {prediction.nivel_risco} · {(prediction.probabilidade_entupimento * 100).toFixed(0)}%</>}
+            </Popup>
           </CircleMarker>
           {bueiros.flatMap((bueiro) => ([
             <CircleMarker key={`${bueiro.id}-montante`} center={[bueiro.latitude_montante, bueiro.longitude_montante]} radius={5} pathOptions={{ color: '#176f68', fillColor: '#49a99b', fillOpacity: 0.9, weight: 2 }}>
@@ -99,6 +141,19 @@ export function MapPanel({ coordinates }: Props) {
         <span><i className="legend-dot location-dot" /> Local analisado</span>
         <span><i className="legend-dot inventory-dot" /> Inventário</span>
         <span><i className="legend-dot sac-dot" /> Chamados SAC</span>
+        <span><i className="legend-dot risk-low" /> Baixo</span>
+        <span><i className="legend-dot risk-medium" /> Médio</span>
+        <span><i className="legend-dot risk-high" /> Alto</span>
+        <span><i className="legend-dot risk-critical" /> Crítico</span>
+      </div>
+      <div className="risk-region-summary" style={{ '--region-color': riskColor ?? '#8a958e' } as CSSProperties}>
+        <span className="risk-region-indicator" />
+        <div>
+          <strong>{prediction ? `Região analisada · risco ${prediction.nivel_risco}` : 'Previsão de entupimento indisponível'}</strong>
+          <span>{prediction
+            ? `Probabilidade de entupimento: ${(prediction.probabilidade_entupimento * 100).toFixed(0)}% · Área delimitada pelo raio SAC de ${radius.toLocaleString('pt-BR')} m.`
+            : 'Não foi possível gerar o contorno de risco para este local.'}</span>
+        </div>
       </div>
       <div className="map-summary-grid">
         <div><span>Estruturas na rodovia</span><strong>{bueiros.length}</strong></div>

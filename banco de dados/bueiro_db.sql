@@ -127,6 +127,7 @@ CREATE TABLE `leiturasensor` (
   `valor_leitura` float NOT NULL,
   `data_hora` datetime DEFAULT CURRENT_TIMESTAMP,
   `id_sensor` int NOT NULL,
+  `unidade_medida` varchar(20) NOT NULL DEFAULT 'cm',
   PRIMARY KEY (`id_leitura`),
   KEY `fk_sensor_leitura` (`id_sensor`),
   CONSTRAINT `fk_sensor_leitura` FOREIGN KEY (`id_sensor`) REFERENCES `sensor` (`id_sensor`)
@@ -176,11 +177,17 @@ DROP TABLE IF EXISTS `registroimagem`;
 CREATE TABLE `registroimagem` (
   `id_imagem` int NOT NULL AUTO_INCREMENT,
   `caminho_imagem` varchar(255) NOT NULL,
+  `id_leitura` int DEFAULT NULL,
+  `tipo_residuo` varchar(50) DEFAULT NULL,
+  `confianca_ia` float DEFAULT NULL,
+  `status_analise` varchar(30) DEFAULT NULL,
   `data_hora` datetime DEFAULT CURRENT_TIMESTAMP,
   `id_camera` int NOT NULL,
   PRIMARY KEY (`id_imagem`),
   KEY `fk_camera_imagem` (`id_camera`),
-  CONSTRAINT `fk_camera_imagem` FOREIGN KEY (`id_camera`) REFERENCES `camera` (`id_camera`)
+  KEY `fk_imagem_leitura` (`id_leitura`),
+  CONSTRAINT `fk_camera_imagem` FOREIGN KEY (`id_camera`) REFERENCES `camera` (`id_camera`),
+  CONSTRAINT `fk_imagem_leitura` FOREIGN KEY (`id_leitura`) REFERENCES `leiturasensor` (`id_leitura`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -214,6 +221,7 @@ CREATE TABLE `sensor` (
 
 LOCK TABLES `sensor` WRITE;
 /*!40000 ALTER TABLE `sensor` DISABLE KEYS */;
+INSERT INTO `sensor` (`id_sensor`, `tipo_sensor`, `status_sensor`) VALUES (1,'Ultrassonico','Ativo');
 /*!40000 ALTER TABLE `sensor` ENABLE KEYS */;
 UNLOCK TABLES;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;

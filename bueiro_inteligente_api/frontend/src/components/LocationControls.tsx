@@ -1,5 +1,5 @@
 import { useDeferredValue, useEffect, useEffectEvent, useState } from 'react'
-import { ChevronDown, Crosshair, MapPin, Plus, Save } from 'lucide-react'
+import { ChevronDown, Crosshair, MapPin, Plus, Save, Trash2 } from 'lucide-react'
 import { apiRequest } from '../api'
 import type { Bueiro, SacLocation } from '../types'
 
@@ -22,6 +22,7 @@ type Props = {
 }
 
 export function LocationControls({ coordinates, onCoordinatesChange, onNotice }: Props) {
+  const notify = useEffectEvent(onNotice)
   const [mode, setMode] = useState('preset')
   const [preset, setPreset] = useState(Object.keys(PRESETS)[0])
   const [roads, setRoads] = useState<string[]>([])
@@ -33,7 +34,10 @@ export function LocationControls({ coordinates, onCoordinatesChange, onNotice }:
   const [sacId, setSacId] = useState('')
   const [sacSearch, setSacSearch] = useState('')
   const [expanded, setExpanded] = useState(false)
+  const [manageExpanded, setManageExpanded] = useState(false)
+  const [registeredPoints, setRegisteredPoints] = useState<Bueiro[]>([])
   const [saving, setSaving] = useState(false)
+  const [removingId, setRemovingId] = useState<string | null>(null)
   const [form, setForm] = useState({
     regional: 'Cadastro manual',
     elemento: 'Bueiro',
@@ -54,6 +58,8 @@ export function LocationControls({ coordinates, onCoordinatesChange, onNotice }:
       setRoads(data)
       setRoad((current) => current || data[0] || '')
     }).catch(() => setRoads([]))
+    void apiRequest<Bueiro[]>('/bueiros/cadastrados').then(setRegisteredPoints)
+      .catch((error) => notify(error instanceof Error ? error.message : 'Não foi possível carregar os pontos cadastrados.', 'error'))
     void apiRequest<SacLocation[]>('/bueiros/locais-sac').then((data) => {
       setSacLocations(data)
     }).catch(() => setSacLocations([]))
@@ -156,12 +162,38 @@ export function LocationControls({ coordinates, onCoordinatesChange, onNotice }:
       onNotice(`Cadastro ${result.id} salvo no inventário.`, 'success')
       setMode('inventory')
       if (form.rodovia) setRoad(form.rodovia)
-      const updated = await apiRequest<string[]>('/bueiros/rodovias')
-      setRoads(updated)
+      const [updatedRoads, updatedPoints] = await Promise.all([
+        apiRequest<string[]>('/bueiros/rodovias'),
+        apiRequest<Bueiro[]>('/bueiros/cadastrados'),
+      ])
+      setRoads(updatedRoads)
+      setRegisteredPoints(updatedPoints)
+      setExpanded(false)
     } catch (error) {
       onNotice(error instanceof Error ? error.message : 'Não foi possível salvar o cadastro.', 'error')
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function removeBueiro(id: string) {
+    const pointToRemove = registeredPoints.find((item) => String(item.id) === id)
+    if (!pointToRemove || !window.confirm(`Remover o ponto cadastrado "${pointToRemove.rodovia}"?`)) return
+
+    setRemovingId(id)
+    try {
+      await apiRequest(`/bueiros/cadastrados/${encodeURIComponent(id)}`, { method: 'DELETE' })
+      const [updatedPoints, updatedRoads] = await Promise.all([
+        apiRequest<Bueiro[]>('/bueiros/cadastrados'),
+        apiRequest<string[]>('/bueiros/rodovias'),
+      ])
+      setRegisteredPoints(updatedPoints)
+      setRoads(updatedRoads)
+      onNotice(`Ponto ${id} removido.`, 'success')
+    } catch (error) {
+      onNotice(error instanceof Error ? error.message : 'Não foi possível remover o ponto cadastrado.', 'error')
+    } finally {
+      setRemovingId(null)
     }
   }
 
@@ -232,9 +264,26 @@ export function LocationControls({ coordinates, onCoordinatesChange, onNotice }:
         {selectedSac && <span className="readout-context">{selectedSac.logradouro}, {selectedSac.numero}</span>}
       </div>
 
-      <button className="disclosure-button" type="button" aria-expanded={expanded} onClick={() => setExpanded((value) => !value)}>
-        <Plus size={16} /> Cadastrar ponto <ChevronDown className={expanded ? 'rotated' : ''} size={15} />
-      </button>
+      <div className="point-actions">
+        <button className="disclosure-button" type="button" aria-expanded={expanded} onClick={() => setExpanded((value) => !value)}>
+          <Plus size={16} /> Cadastrar ponto <ChevronDown className={expanded ? 'rotated' : ''} size={15} />
+        </button>
+        <button className="disclosure-button" type="button" aria-expanded={manageExpanded} onClick={() => setManageExpanded((value) => !value)}>
+          <Trash2 size={15} /> Remover ponto <ChevronDown className={manageExpanded ? 'rotated' : ''} size={15} />
+        </button>
+      </div>
+      {manageExpanded && (
+        <div className="registered-points">
+          {registeredPoints.length ? registeredPoints.map((item) => (
+            <div className="registered-point" key={item.id}>
+              <span><strong>{item.rodovia}</strong><small>{item.elemento} · km {item.km.toFixed(3)} · #{item.id}</small></span>
+              <button type="button" className="remove-point-button" aria-label={`Remover ponto ${item.id}`} title="Remover ponto" disabled={removingId === String(item.id)} onClick={() => void removeBueiro(String(item.id))}>
+                <Trash2 size={15} />
+              </button>
+            </div>
+          )) : <p className="registered-points-empty">Nenhum ponto cadastrado para remover.</p>}
+        </div>
+      )}
       {expanded && (
         <form className="bueiro-form" onSubmit={submitBueiro}>
           <label>Regional<input required maxLength={80} value={form.regional} onChange={(event) => updateForm('regional', event.target.value)} /></label>

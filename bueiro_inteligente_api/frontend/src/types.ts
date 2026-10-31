@@ -11,6 +11,19 @@ export type SensorReading = {
   nivel_risco?: RiskLevel | null
 }
 
+export type ImageRecord = {
+  id_imagem: number
+  caminho_imagem: string
+  data_hora: string | null
+  id_camera: number
+  id_leitura: number | null
+  tipo_residuo: string | null
+  confianca_ia: number | null
+  status_analise: string | null
+  possivel_interferencia_sensor: boolean
+  url_imagem: string
+}
+
 export type AlertRecord = {
   id_alerta: number
   descricao: string

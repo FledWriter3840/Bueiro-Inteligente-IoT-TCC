@@ -1,24 +1,24 @@
 import { useEffect, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react'
 import {
   Activity, AlertTriangle, ArrowUpRight, BrainCircuit, Check, ChevronRight,
-  CloudRain, Compass, Droplets, Gauge, Layers3, MapPinned, Plus, RefreshCw,
+  CloudRain, Compass, Droplets, Gauge, Image, Layers3, MapPinned, Plus, RefreshCw,
   Waves, Wrench, X,
 } from 'lucide-react'
 import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Line, LineChart,
   ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
-import { apiRequest } from './api'
+import { apiRequest, apiUrl } from './api'
 import { LocationControls, type Coordinates } from './components/LocationControls'
 import { LazyMapPanel as MapPanel } from './components/LazyMapPanel'
 import type {
-  AlertRecord, CleaningRecord, Comparison, CompactionRecord, DataSources,
+  AlertRecord, CleaningRecord, Comparison, CompactionRecord, DataSources, ImageRecord,
   HistoryRecord, Prediction, SacLocation, SensorReading, Simulation,
   TopographyData, TrainingResult, WeatherData,
 } from './types'
 import './dashboard.css'
 
-type View = 'overview' | 'readings' | 'events' | 'ai' | 'simulation' | 'manual' | 'map'
+type View = 'overview' | 'readings' | 'images' | 'events' | 'ai' | 'simulation' | 'manual' | 'map'
 type Notice = { message: string; kind: 'success' | 'error' }
 type Column<T> = { label: string; render: (row: T) => ReactNode }
 type DashboardData = {
@@ -34,6 +34,7 @@ const TODAY_LABEL = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'full' }).form
 const NAVIGATION = [
   { id: 'overview' as const, label: 'Visão geral', icon: Gauge },
   { id: 'readings' as const, label: 'Leituras', icon: Activity },
+  { id: 'images' as const, label: 'Imagens', icon: Image },
   { id: 'events' as const, label: 'Alertas e eventos', icon: Layers3 },
   { id: 'ai' as const, label: 'IA e previsão', icon: BrainCircuit },
   { id: 'simulation' as const, label: 'Simulação', icon: Waves },
@@ -83,6 +84,9 @@ export default function Dashboard() {
   const [refreshing, setRefreshing] = useState(false)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [error, setError] = useState('')
+  const [imageRecords, setImageRecords] = useState<ImageRecord[]>([])
+  const [imagesError, setImagesError] = useState('')
+  const [imagesLoading, setImagesLoading] = useState(true)
   const [notice, setNotice] = useState<Notice | null>(null)
   const [data, setData] = useState(INITIAL_DATA)
   const [comparison, setComparison] = useState<Comparison | null>(null)
@@ -106,6 +110,7 @@ export default function Dashboard() {
     let active = true
     async function load() {
       setRefreshing(true)
+      setImagesLoading(true)
       const value = <T,>(result: PromiseSettledResult<T>, fallback: T) => result.status === 'fulfilled' ? result.value : fallback
       const core = await Promise.allSettled([
         apiRequest<SensorReading[]>('/sensores/leituras'),
@@ -114,6 +119,7 @@ export default function Dashboard() {
         apiRequest<CompactionRecord[]>('/compactacao/'),
         apiRequest<HistoryRecord[]>('/historico/'),
         apiRequest<Prediction>('/ia/previsao', { params: { id_sensor: 1, lat, lon }, timeoutMs: 120000 }),
+        apiRequest<ImageRecord[]>('/camera/imagens', { params: { limit: 200 } }),
       ] as const)
       if (!active) return
       setData((current) => ({
@@ -121,6 +127,13 @@ export default function Dashboard() {
         readings: value(core[0], []), alerts: value(core[1], []), cleanings: value(core[2], []),
         compactions: value(core[3], []), history: value(core[4], []), prediction: value(core[5], null),
       }))
+      if (core[6].status === 'fulfilled') {
+        setImageRecords(core[6].value)
+        setImagesError('')
+      } else {
+        setImagesError(core[6].reason instanceof Error ? core[6].reason.message : 'Não foi possível carregar os registros das imagens.')
+      }
+      setImagesLoading(false)
       setError(core.every((result) => result.status === 'rejected') ? 'API indisponível. Verifique se a API e o banco estão ativos.' : '')
       setLastUpdated(new Date())
       setRefreshing(false)
@@ -208,6 +221,7 @@ export default function Dashboard() {
         <div className="page-heading"><div><div className="eyebrow">CENTRO DE OPERAÇÕES <span className="heading-rule" /></div><h1>{title}</h1><p>Acompanhamento de risco, sensores e manutenção da rede de drenagem.</p></div><div className="heading-date"><span>HOJE</span><strong>{TODAY_LABEL}</strong></div></div>
         {view === 'overview' && <OverviewView data={data} consistency={consistency} onNavigate={setView} />}
         {view === 'readings' && <ReadingsView readings={data.readings} />}
+        {view === 'images' && <ImagesView records={imageRecords} error={imagesError} loading={imagesLoading} onRefresh={() => setRefreshKey((key) => key + 1)} />}
         {view === 'events' && <EventsView data={data} />}
         {view === 'ai' && <AiView data={data} comparison={comparison} comparisonBusy={comparisonBusy} onCompare={compareEngines} sampleCount={sampleCount} onSampleCount={setSampleCount} onTrain={trainModel} trainingBusy={trainingBusy} trainingResult={trainingResult} />}
         {view === 'simulation' && <SimulationView input={simulationInput} onInput={setSimulationInput} onSubmit={runSimulation} result={simulation} busy={simulationBusy} />}
@@ -241,6 +255,37 @@ function OverviewView({ data, consistency, onNavigate }: { data: DashboardData; 
 
 function ReadingsView({ readings }: { readings: SensorReading[] }) {
   return <section className="panel data-panel"><div className="panel-heading"><div><span className="eyebrow">TELEMETRIA IoT</span><h2>Histórico completo de leituras</h2><p>{readings.length} registros retornados pelos sensores</p></div><Activity size={19} /></div><Table rows={readings} rowKey={(row) => row.id_leitura} empty="Nenhuma leitura registrada ainda." columns={[{ label: 'ID', render: (row) => `#${row.id_leitura}` }, { label: 'Sensor', render: (row) => row.id_sensor }, { label: 'Leitura', render: (row) => <strong>{row.valor_leitura.toFixed(1)} {row.unidade_medida}</strong> }, { label: 'Data e hora', render: (row) => formatDate(row.data_hora) }, { label: 'Risco', render: (row) => row.nivel_risco ? <RiskBadge risk={row.nivel_risco} /> : '—' }, { label: 'Acionamento', render: (row) => row.acionar_limpeza ? `${row.tempo_limpeza_segundos ?? 0} s` : 'Não' }]} /></section>
+}
+
+function ImagesView({ records, error, loading, onRefresh }: {
+  records: ImageRecord[]; error: string; loading: boolean; onRefresh: () => void
+}) {
+  return <section className="panel data-panel images-panel">
+    <div className="panel-heading">
+      <div><span className="eyebrow">CÂMERA IoT</span><h2>Registros de imagens</h2><p>{records.length} imagens registradas · até 200 mais recentes</p></div>
+      <button className="button button-outline" type="button" onClick={onRefresh} disabled={loading}><RefreshCw size={14} className={loading ? 'spin' : ''} />Atualizar</button>
+    </div>
+    {error && <div className="image-error" role="alert"><AlertTriangle size={16} /><span>{error}</span><button type="button" className="text-button" onClick={onRefresh}>Tentar novamente</button></div>}
+    {loading && records.length === 0 ? <div className="empty-state">Carregando registros de imagens…</div> : records.length === 0 ? <div className="empty-state">Nenhuma imagem registrada ainda.</div> : <div className="image-gallery">{records.map((record) => (
+      <article className="image-card" key={record.id_imagem}>
+        <a className="image-preview" href={apiUrl(record.url_imagem).toString()} target="_blank" rel="noreferrer" aria-label={`Abrir imagem ${record.id_imagem} em tamanho original`}>
+          <img src={apiUrl(record.url_imagem).toString()} alt={`Registro de imagem ${record.id_imagem}`} loading="lazy" />
+          <span><Image size={14} />Abrir imagem</span>
+        </a>
+        <div className="image-card-content">
+          <div className="image-card-title"><strong>Imagem #{record.id_imagem}</strong><span>{formatDate(record.data_hora)}</span></div>
+          <dl>
+            <div><dt>Câmera</dt><dd>#{record.id_camera}</dd></div>
+            <div><dt>Leitura associada</dt><dd>{record.id_leitura ? `#${record.id_leitura}` : '—'}</dd></div>
+            <div><dt>Resíduo identificado</dt><dd>{record.tipo_residuo ?? 'Não identificado'}</dd></div>
+            <div><dt>Confiança da IA</dt><dd>{record.confianca_ia == null ? '—' : `${(record.confianca_ia * 100).toFixed(1)}%`}</dd></div>
+            <div><dt>Status da análise</dt><dd>{record.status_analise ?? '—'}</dd></div>
+            {record.possivel_interferencia_sensor && <div className="image-interference"><dt>Atenção</dt><dd>Possível interferência no sensor</dd></div>}
+          </dl>
+        </div>
+      </article>
+    ))}</div>}
+  </section>
 }
 
 function EventPanel<T extends object>({ title, kicker, count, rows, rowKey, columns, empty }: { title: string; kicker: string; count: number; rows: T[]; rowKey: (row: T) => number; columns: Column<T>[]; empty: string }) {

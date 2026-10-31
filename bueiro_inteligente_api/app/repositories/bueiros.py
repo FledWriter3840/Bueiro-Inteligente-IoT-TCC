@@ -39,3 +39,23 @@ class BueiroJsonRepository:
             raise BueiroStorageError(
                 "Não foi possível salvar o novo bueiro."
             ) from exc
+
+    def remover(self, identificador: str) -> bool:
+        """Remove um bueiro cadastrado localmente pelo identificador."""
+        try:
+            registros = self.listar_adicionados()
+            atualizados = [
+                registro for registro in registros
+                if registro.get("id") != identificador
+            ]
+            if len(atualizados) == len(registros):
+                return False
+            self.path.write_text(
+                json.dumps(atualizados, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+        except OSError as exc:
+            raise BueiroStorageError(
+                "Não foi possível remover o bueiro cadastrado."
+            ) from exc
+        return True

@@ -51,6 +51,32 @@ def cadastrar_bueiro(
         raise _erro_armazenamento(exc) from exc
 
 
+@router.get("/cadastrados", response_model=list[schemas.BueiroOut])
+def listar_bueiros_cadastrados(
+    service: BueiroService = Depends(get_bueiro_service),
+) -> list[dict]:
+    """Lista somente os pontos cadastrados manualmente."""
+    try:
+        return service.listar_adicionados()
+    except BueiroStorageError as exc:
+        raise _erro_armazenamento(exc) from exc
+
+
+@router.delete("/cadastrados/{identificador}")
+def remover_bueiro_cadastrado(
+    identificador: str,
+    service: BueiroService = Depends(get_bueiro_service),
+) -> dict[str, str]:
+    """Remove somente pontos cadastrados manualmente."""
+    try:
+        removido = service.remover(identificador)
+    except BueiroStorageError as exc:
+        raise _erro_armazenamento(exc) from exc
+    if not removido:
+        raise HTTPException(status_code=404, detail="Ponto cadastrado não encontrado.")
+    return {"mensagem": "Ponto cadastrado removido."}
+
+
 @router.get("/rodovias", response_model=list[str])
 def listar_rodovias(
     service: CatalogoBueirosService = Depends(get_catalogo_service),

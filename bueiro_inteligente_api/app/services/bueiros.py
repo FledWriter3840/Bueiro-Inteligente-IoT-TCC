@@ -9,6 +9,8 @@ class BueiroRepository(Protocol):
 
     def listar_adicionados(self) -> list[dict]: ...
 
+    def remover(self, identificador: str) -> bool: ...
+
 
 class BueiroService:
     """Valida e coordena operações sobre os bueiros cadastrados."""
@@ -29,3 +31,7 @@ class BueiroService:
     def listar_adicionados(self) -> list[dict]:
         """Lista os bueiros cadastrados fora do inventário original."""
         return self.repository.listar_adicionados()
+
+    def remover(self, identificador: str) -> bool:
+        """Remove um bueiro cadastrado fora do inventário original."""
+        return self.repository.remover(identificador)

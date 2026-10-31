@@ -1,14 +1,35 @@
-from pydantic import BaseModel, ConfigDict, Field
-from datetime import datetime
+from datetime import datetime, timezone
+from typing import Any
+from zoneinfo import ZoneInfo
+
+from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
 
-class ProblemValidationError(BaseModel):
+_FUSO_BRASILIA = ZoneInfo("America/Sao_Paulo")
+
+
+def formatar_data_hora_brasileira(valor: datetime) -> str:
+    """Converte timestamps UTC para o horário de Brasília e formato brasileiro."""
+    if valor.tzinfo is None:
+        valor = valor.replace(tzinfo=timezone.utc)
+    return valor.astimezone(_FUSO_BRASILIA).strftime("%d/%m/%Y %H:%M:%S")
+
+
+class ApiModel(BaseModel):
+    @field_serializer("*", when_used="json", check_fields=False)
+    def serializar_data_hora(self, valor: Any) -> Any:
+        if isinstance(valor, datetime):
+            return formatar_data_hora_brasileira(valor)
+        return valor
+
+
+class ProblemValidationError(ApiModel):
     location: list[str | int]
     message: str
     code: str
 
 
-class ProblemDetails(BaseModel):
+class ProblemDetails(ApiModel):
     type: str = "about:blank"
     title: str
     status: int
@@ -17,11 +38,11 @@ class ProblemDetails(BaseModel):
     errors: list[ProblemValidationError] | None = None
 
 
-class HealthOut(BaseModel):
+class HealthOut(ApiModel):
     message: str
 
 
-class BueiroCreate(BaseModel):
+class BueiroCreate(ApiModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid", allow_inf_nan=False)
 
     regional: str = Field(min_length=1, max_length=80)
@@ -38,7 +59,7 @@ class BueiroCreate(BaseModel):
     longitude_jusante: float = Field(ge=-180, le=180)
 
 
-class BueiroOut(BaseModel):
+class BueiroOut(ApiModel):
     id: int | str
     regional: str
     elemento: str
@@ -54,7 +75,7 @@ class BueiroOut(BaseModel):
     longitude_jusante: float
 
 
-class LocalSACOut(BaseModel):
+class LocalSACOut(ApiModel):
     id: str
     latitude: float
     longitude: float
@@ -63,7 +84,7 @@ class LocalSACOut(BaseModel):
     total_solicitacoes: int
 
 
-class SolicitacaoSACOut(BaseModel):
+class SolicitacaoSACOut(ApiModel):
     id: str
     latitude: float
     longitude: float
@@ -77,7 +98,7 @@ class SolicitacaoSACOut(BaseModel):
     distancia_m: float
 
 
-class SolicitacoesProximasOut(BaseModel):
+class SolicitacoesProximasOut(ApiModel):
     latitude_referencia: float
     longitude_referencia: float
     raio_m: int
@@ -91,7 +112,7 @@ class SolicitacoesProximasOut(BaseModel):
     solicitacoes: list[SolicitacaoSACOut]
 
 
-class LeituraSensorCreate(BaseModel):
+class LeituraSensorCreate(ApiModel):
     id_sensor: int = Field(gt=0)
     valor_leitura: float = Field(allow_inf_nan=False)
     unidade_medida: str = Field(min_length=1, max_length=20)
@@ -108,7 +129,7 @@ class LeituraSensorOut(LeituraSensorCreate):
     modelo_decisao: str = "Multivariada + Machine Learning"
     model_config = ConfigDict(from_attributes=True)
 
-class LimpezaCreate(BaseModel):
+class LimpezaCreate(ApiModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
     status_limpeza: str = Field(min_length=1, max_length=20)
@@ -118,7 +139,7 @@ class LimpezaOut(LimpezaCreate):
     data_hora: datetime
     model_config = ConfigDict(from_attributes=True)
 
-class AlertaCreate(BaseModel):
+class AlertaCreate(ApiModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
     descricao: str = Field(min_length=1, max_length=255)
@@ -130,7 +151,7 @@ class AlertaOut(AlertaCreate):
     data_hora: datetime
     model_config = ConfigDict(from_attributes=True)
 
-class CompactacaoCreate(BaseModel):
+class CompactacaoCreate(ApiModel):
     model_config = ConfigDict(extra="forbid")
 
     nivel_residuo: float = Field(ge=0, allow_inf_nan=False)
@@ -140,7 +161,7 @@ class CompactacaoOut(CompactacaoCreate):
     data_hora: datetime
     model_config = ConfigDict(from_attributes=True)
 
-class HistoricoCreate(BaseModel):
+class HistoricoCreate(ApiModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
     descricao_evento: str = Field(min_length=1, max_length=255)
@@ -151,7 +172,7 @@ class HistoricoOut(HistoricoCreate):
     data_hora: datetime
     model_config = ConfigDict(from_attributes=True)
 
-class PrevisaoEntupimentoCreate(BaseModel):
+class PrevisaoEntupimentoCreate(ApiModel):
     probabilidade: float
     nivel_risco: str
     id_leitura: int
@@ -161,7 +182,7 @@ class PrevisaoEntupimentoOut(PrevisaoEntupimentoCreate):
     data_hora: datetime
     model_config = ConfigDict(from_attributes=True)
 
-class AnaliseIAResult(BaseModel):
+class AnaliseIAResult(ApiModel):
     # ── Campos originais (mantidos para compatibilidade) ──────────
     probabilidade_entupimento: float
     nivel_risco: str
@@ -189,12 +210,12 @@ class AnaliseIAResult(BaseModel):
     fontes_dados_disponiveis: list[str] = []
     """Lista de fontes de dados que foram efetivamente utilizadas."""
 
-class CenarioSimulacaoRequest(BaseModel):
+class CenarioSimulacaoRequest(ApiModel):
     distancia_inicial_cm: float = 350.0
     velocidade_subida_cm_min: float = 25.0
     minutos_simulacao: int = 10
 
-class AnaliseIAMLResult(BaseModel):
+class AnaliseIAMLResult(ApiModel):
     nivel_risco: str
     probabilidade_classe: float
     classes_probabilidades: dict[str, float]
@@ -204,7 +225,7 @@ class AnaliseIAMLResult(BaseModel):
     modelo_utilizado: str
     data_analise: datetime
 
-class TreinoMLResult(BaseModel):
+class TreinoMLResult(ApiModel):
     acuracia: float
     relatorio_classificacao: str
     matriz_confusao: list
@@ -212,7 +233,7 @@ class TreinoMLResult(BaseModel):
     n_amostras_treino: int
     n_amostras_teste: int
 
-class ComparativoIAResult(BaseModel):
+class ComparativoIAResult(ApiModel):
     motor_regressao: AnaliseIAResult
     motor_machine_learning: AnaliseIAMLResult
     convergencia: bool

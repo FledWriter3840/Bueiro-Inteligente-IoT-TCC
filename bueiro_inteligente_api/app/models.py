@@ -17,7 +17,7 @@ class LeituraSensor(Base):
     id_sensor = Column(Integer, ForeignKey("sensor.id_sensor"))
     valor_leitura = Column(Float)
     data_hora = Column(DateTime,default=datetime.utcnow ,server_default=func.now())
-    unidade_medida = Column(String(20), nullable=False)
+    unidade_medida = Column(String(20), nullable=False, default="cm", server_default="cm")
 
 
 class Camera(Base):
@@ -32,6 +32,7 @@ class RegistroImagem(Base):
 
     id_imagem = Column(Integer, primary_key=True, index=True)
     caminho_imagem = Column(String(255), nullable=False)
+    id_leitura = Column(Integer, ForeignKey("leiturasensor.id_leitura"))
     tipo_residuo = Column(String(50))
     confianca_ia = Column(Float)
     status_analise = Column(String(30))
@@ -87,4 +88,3 @@ class HistoricoSistema(Base):
     data_hora = Column(DateTime,default=datetime.utcnow, server_default=func.now())
     descricao_evento = Column(String(255), nullable=False)
     id_usuario = Column(Integer, ForeignKey("usuario.id_usuario"))
-

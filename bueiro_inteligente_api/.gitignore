@@ -1,1 +1,3 @@
 .env
+app/storage/images/*.jpg
+app/ml/residuos_modelo.joblib

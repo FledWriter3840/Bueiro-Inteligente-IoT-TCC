@@ -1,7 +1,11 @@
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '/api'
 
+export function apiUrl(endpoint: string): URL {
+  return new URL(`${API_BASE}${endpoint}`, window.location.origin)
+}
+
 type RequestOptions = {
-  method?: 'GET' | 'POST'
+  method?: 'GET' | 'POST' | 'DELETE'
   params?: Record<string, string | number | boolean | undefined>
   body?: unknown
   timeoutMs?: number
@@ -18,7 +22,7 @@ export class ApiError extends Error {
 }
 
 export async function apiRequest<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
-  const url = new URL(`${API_BASE}${endpoint}`, window.location.origin)
+  const url = apiUrl(endpoint)
   Object.entries(options.params ?? {}).forEach(([key, value]) => {
     if (value !== undefined) url.searchParams.set(key, String(value))
   })

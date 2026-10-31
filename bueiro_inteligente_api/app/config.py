@@ -72,6 +72,10 @@ OVERPASS_API_URL: str = os.getenv(
 	"OVERPASS_API_URL",
 	"https://overpass-api.de/api/interpreter",
 )
+OVERPASS_API_URL_FALLBACK: str = os.getenv(
+	"OVERPASS_API_URL_FALLBACK",
+	"https://overpass.kumi.systems/api/interpreter",
+)
 OVERPASS_RAIO_METROS: int = int(os.getenv("OVERPASS_RAIO_METROS", "500"))
 OVERPASS_TIMEOUT_SEGUNDOS: int = 20
 OVERPASS_QUERY_TIMEOUT_SEGUNDOS: int = 15

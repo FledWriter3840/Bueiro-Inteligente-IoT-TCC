@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
-from .routers import sensores, alertas, limpeza, compactacao, historico, ia, bueiros
+from .routers import sensores, alertas, limpeza, compactacao, historico, ia, bueiros, camera
 from .dados_externos import inicializar_dados_externos
 from .errors import register_exception_handlers
 from . import schemas
@@ -29,6 +29,7 @@ app.include_router(compactacao.router)
 app.include_router(historico.router)
 app.include_router(ia.router)
 app.include_router(bueiros.router)
+app.include_router(camera.router)
 
 @app.get("/", response_model=schemas.HealthOut)
 def root() -> dict[str, str]:

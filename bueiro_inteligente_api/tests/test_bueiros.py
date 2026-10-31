@@ -102,10 +102,44 @@ class TestBueirosRouter(unittest.TestCase):
                 listagem = self.client.get(
                     "/bueiros/", params={"rodovia": cadastro["rodovia"]}
                 ).json()
+                cadastrados = self.client.get("/bueiros/cadastrados").json()
 
         self.assertTrue(criado["id"].startswith("NOVO-"))
         self.assertIn(cadastro["rodovia"], rodovias)
         self.assertIn(criado, listagem)
+        self.assertIn(criado, cadastrados)
+
+    def test_remove_ponto_cadastrado_sem_alterar_inventario_original(self):
+        cadastro = {
+            "regional": "Teste local",
+            "elemento": "Boca de lobo",
+            "rodovia": "Rua removível",
+            "levantamento": "2026-09-26",
+            "km": 12.5,
+            "extensao_m": None,
+            "dimensao_m": None,
+            "tipo": "Boca de lobo de concreto",
+            "latitude_montante": -23.55,
+            "longitude_montante": -46.63,
+            "latitude_jusante": -23.5501,
+            "longitude_jusante": -46.6301,
+        }
+        with tempfile.TemporaryDirectory() as diretorio:
+            arquivo_adicoes = Path(diretorio) / "bueiros_adicionados.json"
+            with patch.object(bueiros_router, "ADICOES_PATH", arquivo_adicoes):
+                criado = self.client.post("/bueiros/", json=cadastro).json()
+                resposta = self.client.delete(
+                    f"/bueiros/cadastrados/{criado['id']}"
+                )
+                cadastrados = self.client.get("/bueiros/cadastrados").json()
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(cadastrados, [])
+
+    def test_nao_remove_ponto_que_nao_foi_cadastrado_manualmente(self):
+        resposta = self.client.delete("/bueiros/cadastrados/1")
+
+        self.assertEqual(resposta.status_code, 404)
 
     def test_rejeita_coordenada_fora_dos_limites_no_cadastro(self):
         resposta = self.client.post("/bueiros/", json={

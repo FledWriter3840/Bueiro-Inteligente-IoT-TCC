@@ -22,12 +22,15 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+import requests
+
 from .config import (
     DADOS_ALAGAMENTOS_PATH,
     DADOS_GEOGRAFICOS_PATH,
     DADOS_USO_SOLO_PATH,
     OPENTOPOGRAPHY_API_KEY,
     OVERPASS_API_URL,
+    OVERPASS_API_URL_FALLBACK,
     OVERPASS_RAIO_METROS,
     OVERPASS_TIMEOUT_SEGUNDOS,
     OVERPASS_QUERY_TIMEOUT_SEGUNDOS,
@@ -528,17 +531,28 @@ class UsoDeSoloProvider:
 out center tags;
 """
 
-        try:
-            resposta = external_http_client.post_json(
-                OVERPASS_API_URL,
-                data=consulta,
-                headers={"User-Agent": "BueiroInteligenteTCC/1.0"},
-                timeout=OVERPASS_TIMEOUT_SEGUNDOS,
-            )
-            elementos = resposta.get("elements", [])
-        except Exception as exc:
-            logger.warning("Falha na consulta de uso do solo via Overpass: %s", exc)
+        resposta = None
+        endpoints = dict.fromkeys((OVERPASS_API_URL, OVERPASS_API_URL_FALLBACK))
+        for endpoint in endpoints:
+            try:
+                resposta = external_http_client.post_json(
+                    endpoint,
+                    data=consulta,
+                    headers={"User-Agent": "BueiroInteligenteTCC/1.0"},
+                    timeout=OVERPASS_TIMEOUT_SEGUNDOS,
+                )
+                break
+            except (requests.RequestException, ValueError) as exc:
+                logger.warning(
+                    "Falha na consulta de uso do solo via Overpass (%s): %s",
+                    endpoint,
+                    exc,
+                )
+
+        if resposta is None:
             return None
+
+        elementos = resposta.get("elements", [])
 
         mercados: list[float] = []
         parques: list[float] = []
