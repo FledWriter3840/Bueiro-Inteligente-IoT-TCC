@@ -66,6 +66,7 @@ BUEIRO_LONGITUDE: float = float(os.getenv("BUEIRO_LONGITUDE", "-46.6333"))
 DADOS_ALAGAMENTOS_PATH: str = os.getenv("DADOS_ALAGAMENTOS_PATH", "")
 DADOS_GEOGRAFICOS_PATH: str = os.getenv("DADOS_GEOGRAFICOS_PATH", "")
 DADOS_USO_SOLO_PATH: str = os.getenv("DADOS_USO_SOLO_PATH", "")
+CEMADEN_ESTACAO: str = os.getenv("CEMADEN_ESTACAO", "")
 
 # OpenStreetMap / Overpass para dados do entorno
 OVERPASS_API_URL: str = os.getenv(

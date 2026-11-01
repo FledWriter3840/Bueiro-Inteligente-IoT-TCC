@@ -38,6 +38,10 @@ from .config import (
 )
 from .enums import NivelRisco
 from .weather_service import obter_dados_climaticos, DadosClimaticos
+from .cemaden_service import (
+    DadosPluviometricosCemaden,
+    obter_dados_pluviometricos,
+)
 from .dados_temporais import extrair_dados_temporais, DadosTemporais
 from .dados_externos import (
     historico_alagamentos,
@@ -109,6 +113,7 @@ class PrevisorEntupimentoIA:
 
         # ─── 2. Coleta de dados climáticos (OpenWeatherMap) ────────
         dados_clima = obter_dados_climaticos(lat, lon)
+        dados_cemaden = obter_dados_pluviometricos(lat, lon, agora)
 
         # ─── 3. Coleta de dados temporais ──────────────────────────
         dados_tempo = extrair_dados_temporais(agora)
@@ -129,7 +134,7 @@ class PrevisorEntupimentoIA:
         score_sensor = _calcular_score_sensor(
             distancia_atual, taxa_subida_cm_min, nivel_residuo_pct
         )
-        score_clima = _calcular_score_clima(dados_clima)
+        score_clima = _calcular_score_clima(dados_clima, dados_cemaden)
         score_temporal = _calcular_score_temporal(dados_tempo)
         score_alag = _calcular_score_alagamento(score_alagamento)
         score_geo = _calcular_score_geografico(perfil_topo)
@@ -196,6 +201,8 @@ class PrevisorEntupimentoIA:
         fontes = ["Sensor IoT (Telemetria)"]
         if dados_clima.disponivel:
             fontes.append("OpenWeatherMap (Clima)")
+        if dados_cemaden.disponivel:
+            fontes.append("CEMADEN (Pluviometria observada)")
         fontes.append("Dados Temporais (datetime)")
         if score_alagamento.disponivel:
             fontes.append("Histórico Alagamentos (CGE SP)")
@@ -209,13 +216,19 @@ class PrevisorEntupimentoIA:
         # ═══════════════════════════════════════════════════════════
 
         dados_clima_dict = None
-        if dados_clima.disponivel:
+        if dados_clima.disponivel or dados_cemaden.disponivel:
             dados_clima_dict = {
                 "chuva_mm_h": dados_clima.chuva_mm_h,
                 "umidade_pct": dados_clima.umidade_pct,
                 "vento_ms": dados_clima.vento_ms,
                 "previsao_chuva_3h_mm": dados_clima.previsao_chuva_proximas_3h_mm,
                 "descricao": dados_clima.descricao_clima,
+                "chuva_utilizada_no_score_mm_1h": (
+                    dados_cemaden.chuva_ultima_hora_mm
+                    if dados_cemaden.disponivel
+                    else dados_clima.chuva_mm_h
+                ),
+                "cemaden": dados_cemaden.para_dict(),
             }
 
         # ═══════════════════════════════════════════════════════════
@@ -383,28 +396,37 @@ def _calcular_score_sensor(
     return max(0.0, min(1.0, score))
 
 
-def _calcular_score_clima(dados: DadosClimaticos) -> float:
+def _calcular_score_clima(
+    dados: DadosClimaticos,
+    dados_cemaden: DadosPluviometricosCemaden | None = None,
+) -> float:
     """
     Score da dimensão CLIMÁTICA (0.0 a 1.0).
 
     Maior risco quando:
-    - Está chovendo forte agora (chuva_mm_h alta)
+    - Está chovendo forte agora (medição recente CEMADEN ou OpenWeatherMap)
     - Previsão de mais chuva nas próximas 3h
     - Umidade muito alta (>85%) indica saturação do solo
     - Vento forte pode arrastar mais detritos
     """
-    if not dados.disponivel:
+    cemaden_disponivel = bool(dados_cemaden and dados_cemaden.disponivel)
+    if not dados.disponivel and not cemaden_disponivel:
         # Sem dados climáticos: retorna score neutro (0.3)
         return 0.30
 
-    # Chuva atual
-    if dados.chuva_mm_h >= 25.0:
+    # A medição local observada prevalece sobre a estimativa remota quando recente.
+    chuva_atual_mm = (
+        dados_cemaden.chuva_ultima_hora_mm
+        if cemaden_disponivel
+        else dados.chuva_mm_h
+    ) or 0.0
+    if chuva_atual_mm >= 25.0:
         score_chuva = 1.0   # Chuva muito forte
-    elif dados.chuva_mm_h >= 10.0:
+    elif chuva_atual_mm >= 10.0:
         score_chuva = 0.80  # Chuva forte
-    elif dados.chuva_mm_h >= 5.0:
+    elif chuva_atual_mm >= 5.0:
         score_chuva = 0.55  # Chuva moderada
-    elif dados.chuva_mm_h >= 1.0:
+    elif chuva_atual_mm >= 1.0:
         score_chuva = 0.30  # Chuva leve
     else:
         score_chuva = 0.05  # Sem chuva
@@ -430,7 +452,7 @@ def _calcular_score_clima(dados: DadosClimaticos) -> float:
         score_umidade = 0.05
 
     # Vento (contribuição menor)
-    score_vento = min(0.50, dados.vento_ms / 20.0)
+    score_vento = min(0.50, dados.vento_ms / 20.0) if dados.disponivel else 0.0
 
     # Média ponderada dos sub-scores climáticos
     score = (
@@ -642,7 +664,7 @@ def _recomendar_limpeza(
         if score_sensor >= 0.60:
             motivos.append("acúmulo de sólidos no cesto")
         if score_clima >= 0.60:
-            motivos.append("chuva forte prevista")
+            motivos.append("chuva intensa observada ou prevista")
         if taxa_subida_cm_min > 10.0:
             motivos.append(f"subida rápida ({taxa_subida_cm_min:.1f} cm/min)")
 

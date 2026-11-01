@@ -7,6 +7,7 @@ from ..dados_externos import dados_geograficos, historico_alagamentos, uso_do_so
 from ..enums import NivelRisco
 from ..ml.predictor import PrevisorEntupimentoML
 from ..weather_service import obter_dados_climaticos_dict
+from ..cemaden_service import obter_dados_pluviometricos
 
 
 def simular_cenario_chuva(
@@ -113,12 +114,17 @@ def obter_topografia_atual(lat: float, lon: float) -> dict[str, object]:
 
 
 def listar_fontes_dados() -> dict[str, object]:
-    """Resume disponibilidade das seis fontes de dados da análise."""
+    """Resume disponibilidade das seis dimensões de dados da análise."""
     perfil_solo = uso_do_solo.obter_perfil(
         lat=BUEIRO_LATITUDE,
         lon=BUEIRO_LONGITUDE,
     )
     clima_disponivel = obter_dados_climaticos_dict().get("disponivel", False)
+    cemaden = obter_dados_pluviometricos(
+        latitude=BUEIRO_LATITUDE,
+        longitude=BUEIRO_LONGITUDE,
+    )
+    clima_disponivel = clima_disponivel or cemaden.disponivel
     uso_solo_ativo = perfil_solo.disponivel
 
     return {
@@ -129,9 +135,16 @@ def listar_fontes_dados() -> dict[str, object]:
                 "descricao": "Dados do sensor ultrassônico e compactação via banco de dados MySQL.",
             },
             {
-                "nome": "OpenWeatherMap (Clima)",
-                "status": "Ativo" if clima_disponivel else "Indisponível (configurar OPENWEATHER_API_KEY)",
-                "descricao": "Dados climáticos em tempo real: chuva, umidade, vento, previsão.",
+                "nome": "Clima (CEMADEN e OpenWeatherMap)",
+                "status": (
+                    "Ativo"
+                    if clima_disponivel
+                    else "Indisponível (sem CEMADEN recente ou OpenWeatherMap)"
+                ),
+                "descricao": (
+                    "CEMADEN: chuva observada da estação mais próxima "
+                    f"({cemaden.status}). OpenWeatherMap: condições atuais e previsão."
+                ),
             },
             {
                 "nome": "Dados Temporais (datetime)",

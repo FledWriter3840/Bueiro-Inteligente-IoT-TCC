@@ -107,7 +107,20 @@ Analisa a distancia atual, a velocidade de subida do nivel e o nivel de residuos
 
 ### Clima
 
-A OpenWeatherMap fornece chuva atual, previsao de chuva para as proximas 3 horas, umidade e vento.
+A OpenWeatherMap fornece condicoes atuais, umidade, vento e previsao de chuva para as proximas 3 horas. Os arquivos historicos do CEMADEN ficam em `bueiro_inteligente_api/datasets/dados_pluviometricos`, organizados por ano e mes.
+
+Antes de iniciar a API, crie o indice local compacto da estacao CEMADEN mais proxima do bueiro:
+
+```powershell
+cd bueiro_inteligente_api
+python -m app.cemaden_service --build-index
+```
+
+O comando percorre os CSVs e cria um indice SQLite fora do repositorio (por padrao, na pasta temporaria do sistema). A estacao pode ser fixada com `CEMADEN_ESTACAO`; os caminhos dos dados e do indice podem ser alterados com `CEMADEN_DATASET_PATH` e `CEMADEN_INDEX_PATH`. Para outro bueiro, informe `--latitude` e `--longitude` ao criar o indice. Depois de adicionar ou substituir arquivos, execute a indexacao novamente.
+
+Na analise, o CEMADEN so contribui quando a ultima leitura da estacao indexada tem no maximo 90 minutos e esta a ate 25 km do bueiro. A API soma `valorMedida` na ultima hora como chuva observada, mantendo previsao, umidade e vento da OpenWeatherMap. Essa integracao assume que cada `valorMedida` representa milimetros de chuva; confirme a unidade e o intervalo de acumulacao na documentacao da exportacao, pois falhas de comunicacao podem deixar lacunas. Leituras antigas nao sao tratadas como chuva atual nem usadas para treinar o modelo.
+
+O endpoint `GET /ia/pluviometria-cemaden` mostra disponibilidade, estacao, distancia, horario e acumulado recente. Para consultar a serie historica agregada por dia, use `GET /ia/pluviometria-cemaden/historico?data_inicio=2023-01-01&data_fim=2023-12-31`; dias sem registros nao sao incluidos e nao devem ser interpretados automaticamente como chuva zero. `/ia/fontes-dados` informa o status da fonte.
 
 ### Dados temporais
 

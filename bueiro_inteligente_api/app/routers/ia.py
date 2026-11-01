@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends
+from datetime import date
+
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from .. import models, schemas
 from ..database import get_db
@@ -7,6 +9,7 @@ from ..ai_predictor import PrevisorEntupimentoIA
 from ..ml.predictor import PrevisorEntupimentoML
 from ..ml.train import treinar_modelo as treinar_modelo_ml_fn
 from ..weather_service import obter_dados_climaticos_dict
+from ..cemaden_service import obter_dados_pluviometricos, obter_historico_diario
 from ..config import (
     BUEIRO_LATITUDE,
     BUEIRO_LONGITUDE,
@@ -127,6 +130,31 @@ def obter_clima_atual(
         lat=lat,
         lon=lon,
     )
+
+
+@router.get("/pluviometria-cemaden", response_model=None)
+def obter_pluviometria_cemaden(
+    lat: float = BUEIRO_LATITUDE,
+    lon: float = BUEIRO_LONGITUDE,
+) -> dict[str, object]:
+    """Retorna a chuva observada recente da estação CEMADEN indexada mais próxima."""
+    return obter_dados_pluviometricos(lat, lon).para_dict()
+
+
+@router.get("/pluviometria-cemaden/historico", response_model=None)
+def obter_historico_pluviometria_cemaden(
+    data_inicio: date,
+    data_fim: date,
+    lat: float = BUEIRO_LATITUDE,
+    lon: float = BUEIRO_LONGITUDE,
+) -> dict[str, object]:
+    """Retorna totais diários CEMADEN para o intervalo solicitado."""
+    if data_fim < data_inicio:
+        raise HTTPException(
+            status_code=422,
+            detail="data_fim deve ser igual ou posterior a data_inicio.",
+        )
+    return obter_historico_diario(data_inicio, data_fim, lat, lon)
 
 
 @router.get("/topografia-atual", response_model=None)
