@@ -137,7 +137,7 @@ Bueiro-Inteligente-IoT-TCC/
 
 # 👨‍🏫 Professor/Orientador
 
-- Andre Muniz
+- Marco Gomes
 
 
 ---
