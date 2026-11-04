@@ -4,6 +4,80 @@ Sistema inteligente automatizado para limpeza de bueiros urbanos utilizando Inte
 
 ---
 
+## Trabalho de Sistemas Distribuídos: monitoramento de alagamentos
+
+Este repositório contém a API, as migrações e o simulador que apoiam o trabalho
+de Sistemas Distribuídos, reaproveitando o TCC **Bueiro Inteligente** para
+monitorar sensores e receber **exclusivamente denúncias de alagamentos e
+inundações**. O app React Native/Expo fica no repositório separado
+[Bueiro-Inteligente-mobile--app](https://github.com/FledWriter3840/Bueiro-Inteligente-mobile--app).
+
+### Executar a API
+
+1. Instale e inicialize o MySQL, crie/importe o banco `bueiro_inteligente` e
+   configure `bueiro_inteligente_api/.env` a partir de
+   `bueiro_inteligente_api/.env.example`.
+2. Execute uma vez a migração aditiva
+   `bueiro_inteligente_api/migrations/001_app_mobile.sql` no banco existente.
+   Ela adiciona coordenadas à tabela `sensor`, timestamps idempotentes em
+   `leiturasensor` e a tabela `ocorrencias`, sem remover dados.
+3. Na raiz do projeto, crie um ambiente Python e instale as dependências:
+
+   ```powershell
+   py -m venv .venv
+   .\.venv\Scripts\Activate.ps1
+   pip install -r requirements.txt
+   ```
+
+4. Inicie a API:
+
+   ```powershell
+   cd bueiro_inteligente_api
+   python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+   ```
+
+   A documentação interativa fica em `http://localhost:8000/docs`; o healthcheck
+   está em `http://localhost:8000/saude`. Para demonstração com vários
+   sensores, execute também, uma vez, a migração opcional
+   `bueiro_inteligente_api/migrations/002_sensores_demo.sql`.
+
+### Executar o simulador
+
+Com a API em execução e pelo menos três sensores cadastrados:
+
+```powershell
+python simulador_bueiros.py --api-url http://localhost:8000 --intervalo 5 --ciclos 8
+```
+
+O simulador consulta `GET /bueiros` para obter IDs existentes e envia as
+leituras para `POST /sensores/leitura`. Sem `--ciclos`, ele continua até ser
+interrompido com `Ctrl+C`. Os níveis sobem até o estado crítico e depois variam.
+
+### Executar o app no Expo Go
+
+No clone do repositório mobile, entre em `bueiro-app`, copie `.env.example`
+para `.env.local` e configure `EXPO_PUBLIC_API_URL` com o IPv4 do computador
+na mesma rede Wi-Fi do celular (não use `localhost`). Instale e inicie:
+
+   ```powershell
+   cd bueiro-app
+   npm install
+   npx expo start --lan
+   ```
+
+Abra o QR code com Expo Go. Não é necessário Android Studio ou emulador. O mapa
+usa Leaflet/OpenStreetMap sem chave paga e precisa de internet. Notificações
+locais são usadas para transições a crítico; push remoto não é suportado no
+Expo Go para Android.
+
+Mais detalhes estão em [docs/arquitetura-distribuida-app.md](docs/arquitetura-distribuida-app.md),
+[docs/conceitos-distribuidos-app.md](docs/conceitos-distribuidos-app.md) e
+[docs/roteiro-demo-app.md](docs/roteiro-demo-app.md). Para executar os testes
+da API, entre em `bueiro_inteligente_api` e rode
+`python -m pytest tests/test_app_mobile.py tests/test_leitura_service.py`.
+
+---
+
 # 📖 Sobre o Projeto
 
 O projeto tem como objetivo desenvolver um sistema inteligente capaz de monitorar, identificar e remover resíduos sólidos automaticamente de bueiros urbanos, ajudando na prevenção de enchentes e alagamentos em grandes centros urbanos.

@@ -31,12 +31,13 @@ def decidir_acionamento(
 
 def montar_resposta_leitura(
     leitura: models.LeituraSensor,
-    risco_multivariado: str,
-    risco_ml: str,
-    nivel_risco: str,
+    risco_multivariado: str | None,
+    risco_ml: str | None,
+    nivel_risco: str | None,
     acionar_limpeza: bool,
     tempo_limpeza_segundos: int,
     recomendacao_limpeza: str,
+    duplicada: bool = False,
 ) -> dict[str, object]:
     """Monta o payload existente retornado ao firmware."""
     return {
@@ -45,11 +46,16 @@ def montar_resposta_leitura(
         "unidade_medida": leitura.unidade_medida,
         "id_leitura": leitura.id_leitura,
         "data_hora": leitura.data_hora,
+        "duplicada": duplicada,
         "acionar_limpeza": acionar_limpeza,
         "tempo_limpeza_segundos": tempo_limpeza_segundos,
         "motivo_limpeza": (
-            f"Decisão conjunta: multivariada={risco_multivariado}; ML={risco_ml}. "
-            f"{recomendacao_limpeza}"
+            "Reenvio ignorado; a leitura já foi registrada."
+            if duplicada
+            else (
+                f"Decisão conjunta: multivariada={risco_multivariado}; ML={risco_ml}. "
+                f"{recomendacao_limpeza}"
+            )
         ),
         "nivel_risco": nivel_risco,
         "nivel_risco_multivariado": risco_multivariado,
@@ -68,7 +74,19 @@ class LeituraService:
         leitura: schemas.LeituraSensorCreate,
     ) -> dict[str, object]:
         """Persiste uma leitura e produz a decisão de limpeza."""
-        registro = self.repository.criar_leitura(leitura)
+        registro, nova_leitura = self.repository.criar_leitura(leitura)
+        if not nova_leitura:
+            return montar_resposta_leitura(
+                leitura=registro,
+                risco_multivariado=None,
+                risco_ml=None,
+                nivel_risco=None,
+                acionar_limpeza=False,
+                tempo_limpeza_segundos=0,
+                recomendacao_limpeza="",
+                duplicada=True,
+            )
+
         agora = datetime.now(timezone.utc).replace(tzinfo=None)
         limpeza_recente = self.repository.existe_limpeza_recente(agora)
         try:

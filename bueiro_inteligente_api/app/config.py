@@ -59,6 +59,9 @@ OPENTOPOGRAPHY_TIMEOUT_SEGUNDOS: int = 10
 # ─────────────────────────────────────────────────────────────────
 BUEIRO_LATITUDE: float = float(os.getenv("BUEIRO_LATITUDE", "-23.5505"))
 BUEIRO_LONGITUDE: float = float(os.getenv("BUEIRO_LONGITUDE", "-46.6333"))
+BUEIRO_PROFUNDIDADE_CM: float = float(
+    os.getenv("BUEIRO_PROFUNDIDADE_CM", "450")
+)
 
 # ─────────────────────────────────────────────────────────────────
 # Caminhos para datasets externos (esqueleto — preencher quando disponíveis)

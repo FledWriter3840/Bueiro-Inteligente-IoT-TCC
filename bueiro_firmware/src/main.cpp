@@ -5,6 +5,7 @@
 #include <esp_camera.h>
 #include <img_converters.h>
 #include <esp32-hal-psram.h>
+#include <time.h>
 
 const char* ssid = "";
 const char* password = "";
@@ -59,6 +60,51 @@ constexpr float minDistanceCm = 2.0F;
 constexpr float maxDistanceCm = 450.0F;
 
 Servo servoMotor;
+
+constexpr uint8_t sensorId = 1;
+constexpr size_t readingBufferCapacity = 50;
+
+struct LeituraPendente {
+  float valorCm;
+  uint8_t idSensor;
+  char dataHoraUtc[32];
+};
+
+LeituraPendente readingBuffer[readingBufferCapacity];
+size_t readingBufferStart = 0;
+size_t readingBufferCount = 0;
+
+bool gerarTimestampUtc(char* destino, size_t tamanho) {
+  const time_t agora = time(nullptr);
+  if (agora < 1700000000) {
+    return false;
+  }
+
+  struct tm horarioUtc;
+  if (gmtime_r(&agora, &horarioUtc) == nullptr) {
+    return false;
+  }
+  return strftime(destino, tamanho, "%Y-%m-%dT%H:%M:%SZ", &horarioUtc) > 0;
+}
+
+void enfileirarLeitura(float valorCm) {
+  if (readingBufferCount == readingBufferCapacity) {
+    readingBufferStart = (readingBufferStart + 1) % readingBufferCapacity;
+    --readingBufferCount;
+    Serial.println(
+        "[API] Buffer cheio; descartando a leitura pendente mais antiga.");
+  }
+
+  const size_t indice =
+      (readingBufferStart + readingBufferCount) % readingBufferCapacity;
+  readingBuffer[indice] = {};
+  readingBuffer[indice].valorCm = valorCm;
+  readingBuffer[indice].idSensor = sensorId;
+  gerarTimestampUtc(
+      readingBuffer[indice].dataHoraUtc,
+      sizeof(readingBuffer[indice].dataHoraUtc));
+  ++readingBufferCount;
+}
 
 bool iniciarCamera() {
   camera_config_t config = {};
@@ -266,14 +312,7 @@ bool lerDistancia(float& distanciaCm) {
   return distanciaCm >= minDistanceCm && distanciaCm <= maxDistanceCm;
 }
 
-void enviarLeituraParaAPI(float valor) {
-  if (!ENABLE_API) return;
-
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("[API] Sem Wi-Fi; leitura nao enviada.");
-    return;
-  }
-
+bool enviarLeituraParaAPI(const LeituraPendente& leitura) {
   WiFiClient client;
 
   HTTPClient http;
@@ -281,16 +320,22 @@ void enviarLeituraParaAPI(float valor) {
 
   if (!http.begin(client, String(apiBaseUrl) + "/sensores/leitura")) {
     Serial.println("[API] Falha ao iniciar conexao.");
-    return;
+    return false;
   }
 
   http.addHeader("Content-Type", "application/json");
   http.addHeader("User-Agent", "ESP32-Bueiro");
 
-  const String jsonBody = "{\"valor_leitura\": " + String(valor, 2) +
-                          ", \"unidade_medida\": \"cm\", \"id_sensor\": 1}";
+  const String jsonBody =
+      "{\"valor_leitura\":" + String(leitura.valorCm, 2) +
+      ",\"unidade_medida\":\"cm\",\"id_sensor\":" +
+      String(leitura.idSensor) + ",\"data_hora\":\"" +
+      String(leitura.dataHoraUtc) + "\"}";
 
-  Serial.println("[API] Enviando leitura...");
+  Serial.printf(
+      "[API] Enviando leitura de %s coletada em %s...\n",
+      String(leitura.idSensor).c_str(),
+      leitura.dataHoraUtc);
   const int httpCode = http.POST(jsonBody);
   Serial.printf("[API] Codigo HTTP: %d\n", httpCode);
 
@@ -310,12 +355,44 @@ void enviarLeituraParaAPI(float valor) {
     if (ENABLE_CLEANING && comandoLimpezaNaResposta(payload)) {
       executarLimpeza(duracaoLimpezaNaResposta(payload));
     }
+    http.end();
+    return true;
   } else {
     Serial.print("[API] Erro: ");
-    Serial.println(http.errorToString(httpCode));
+    if (httpCode > 0) {
+      Serial.println(http.getString());
+    } else {
+      Serial.println(http.errorToString(httpCode));
+    }
   }
 
   http.end();
+  return false;
+}
+
+void enviarLeiturasPendentes() {
+  if (!ENABLE_API || WiFi.status() != WL_CONNECTED) {
+    return;
+  }
+
+  while (readingBufferCount > 0) {
+    LeituraPendente& leitura = readingBuffer[readingBufferStart];
+    if (leitura.dataHoraUtc[0] == '\0' &&
+        !gerarTimestampUtc(
+            leitura.dataHoraUtc,
+            sizeof(leitura.dataHoraUtc))) {
+      Serial.println("[API] Aguardando sincronizacao do relogio NTP.");
+      return;
+    }
+
+    if (!enviarLeituraParaAPI(leitura)) {
+      Serial.println("[API] Leitura mantida no buffer para nova tentativa.");
+      return;
+    }
+
+    readingBufferStart = (readingBufferStart + 1) % readingBufferCapacity;
+    --readingBufferCount;
+  }
 }
 
 void enviarFotoParaAPI() {
@@ -398,6 +475,7 @@ void setupDispositivo() {
   WiFi.mode(WIFI_STA);
   WiFi.setAutoReconnect(true);
   WiFi.begin(ssid, password);
+  configTime(0, 0, "pool.ntp.org", "time.nist.gov");
   lastWiFiAttempt = millis();
   lastSensorRead = millis() - sensorReadIntervalMs;
   lastPhotoUpload = millis();
@@ -429,7 +507,8 @@ void loopDispositivo() {
     float distanciaCm = 0.0F;
     if (lerDistancia(distanciaCm)) {
       Serial.printf("[SENSOR] Distancia: %.2f cm\n", distanciaCm);
-      enviarLeituraParaAPI(distanciaCm);
+      enfileirarLeitura(distanciaCm);
+      enviarLeiturasPendentes();
     } else {
       Serial.println("[SENSOR] Leitura invalida/sem eco; ignorada.");
     }
