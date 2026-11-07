@@ -1,4 +1,7 @@
 .env
+.env.*
+!.env.example
 app/storage/images/*.jpg
 app/ml/residuos_modelo.joblib
 app/storage/cemaden.sqlite3*
+app/uploads/

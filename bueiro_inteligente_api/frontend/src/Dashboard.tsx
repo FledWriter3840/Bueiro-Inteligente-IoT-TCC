@@ -54,6 +54,11 @@ function formatTime(value?: string | null) {
   return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' }).format(date)
 }
 
+function conciseAlertDescription(description: string) {
+  const summary = description.match(/^(IA Multivariada:\s*.+?\s+risco\s+\(Prob:\s*\d+%\)\.\s*Limpeza:\s*.+?\.\s*ACIONAR CICLO DE LIMPEZA E COMPACTADOR IMEDIATAMENTE!)/i)
+  return summary?.[1] ?? description
+}
+
 function cleaningConsistency(records: CleaningRecord[]) {
   const cutoff = Date.now() - 180 * 86400000
   const dates = [...new Set(records.map((row) => new Date(row.data_hora).getTime()).filter((stamp) => Number.isFinite(stamp) && stamp >= cutoff))].sort((a, b) => a - b)
@@ -89,6 +94,7 @@ export default function Dashboard() {
   const [imagesLoading, setImagesLoading] = useState(true)
   const [notice, setNotice] = useState<Notice | null>(null)
   const [data, setData] = useState(INITIAL_DATA)
+  const [readingsError, setReadingsError] = useState('')
   const [comparison, setComparison] = useState<Comparison | null>(null)
   const [comparisonBusy, setComparisonBusy] = useState(false)
   const [sampleCount, setSampleCount] = useState(3000)
@@ -124,9 +130,16 @@ export default function Dashboard() {
       if (!active) return
       setData((current) => ({
         ...current,
-        readings: value(core[0], []), alerts: value(core[1], []), cleanings: value(core[2], []),
+        readings: value(core[0], current.readings), alerts: value(core[1], []), cleanings: value(core[2], []),
         compactions: value(core[3], []), history: value(core[4], []), prediction: value(core[5], null),
       }))
+      setReadingsError(
+        core[0].status === 'rejected'
+          ? core[0].reason instanceof Error
+            ? core[0].reason.message
+            : 'Não foi possível carregar as leituras da API.'
+          : '',
+      )
       if (core[6].status === 'fulfilled') {
         setImageRecords(core[6].value)
         setImagesError('')
@@ -219,8 +232,8 @@ export default function Dashboard() {
       <div className="page-content">
         {error && <div className="api-banner"><AlertTriangle size={17} /><span>{error}</span><button type="button" className="text-button" onClick={() => setRefreshKey((key) => key + 1)}>Tentar novamente</button></div>}
         <div className="page-heading"><div><div className="eyebrow">CENTRO DE OPERAÇÕES <span className="heading-rule" /></div><h1>{title}</h1><p>Acompanhamento de risco, sensores e manutenção da rede de drenagem.</p></div><div className="heading-date"><span>HOJE</span><strong>{TODAY_LABEL}</strong></div></div>
-        {view === 'overview' && <OverviewView data={data} consistency={consistency} onNavigate={setView} />}
-        {view === 'readings' && <ReadingsView readings={data.readings} />}
+        {view === 'overview' && <OverviewView data={data} coordinates={coordinates} consistency={consistency} readingsError={readingsError} onNavigate={setView} />}
+        {view === 'readings' && <ReadingsView readings={data.readings} error={readingsError} />}
         {view === 'images' && <ImagesView records={imageRecords} error={imagesError} loading={imagesLoading} onRefresh={() => setRefreshKey((key) => key + 1)} />}
         {view === 'events' && <EventsView data={data} />}
         {view === 'ai' && <AiView data={data} comparison={comparison} comparisonBusy={comparisonBusy} onCompare={compareEngines} sampleCount={sampleCount} onSampleCount={setSampleCount} onTrain={trainModel} trainingBusy={trainingBusy} trainingResult={trainingResult} />}
@@ -238,23 +251,40 @@ function Metric({ label, value, detail, tone, icon: Icon }: { label: string; val
   return <div className={`metric-card metric-${tone}`}><div className="metric-top"><span>{label}</span><Icon size={17} /></div><strong>{value}</strong><small>{detail}</small></div>
 }
 
-function OverviewView({ data, consistency, onNavigate }: { data: DashboardData; consistency: { index: number | null; count: number }; onNavigate: (view: View) => void }) {
+function OverviewView({ data, coordinates, consistency, readingsError, onNavigate }: { data: DashboardData; coordinates: Coordinates; consistency: { index: number | null; count: number }; readingsError: string; onNavigate: (view: View) => void }) {
   const latest = data.readings[0]
   const prediction = data.prediction
   const risk = prediction?.nivel_risco ?? 'Baixo'
   const tone = risk === 'Crítico' ? 'critical' : risk === 'Alto' ? 'high' : risk === 'Médio' ? 'medium' : 'good'
   const chartRows = [...data.readings].reverse().slice(-50).map((row) => ({ ...row, timeLabel: formatTime(row.data_hora) }))
+  const recentAlerts = [...data.alerts].sort((a, b) => Date.parse(b.data_hora) - Date.parse(a.data_hora)).slice(0, 6)
   return <>
     <div className="metric-grid"><Metric label="Última leitura" value={latest ? `${latest.valor_leitura.toFixed(1)} ${latest.unidade_medida}` : '—'} detail={latest ? `Sensor ${latest.id_sensor} · ${formatTime(latest.data_hora)}` : 'Sem leituras'} tone="teal" icon={Activity} /><Metric label="Risco de alagamento" value={prediction?.nivel_risco ?? '—'} detail="Análise multivariada atual" tone={tone} icon={AlertTriangle} /><Metric label="Probabilidade" value={prediction ? `${(prediction.probabilidade_entupimento * 100).toFixed(0)}%` : '—'} detail="Entupimento previsto" tone="blue" icon={Gauge} /><Metric label="Urgência de limpeza" value={prediction?.urgencia_limpeza ?? '—'} detail={prediction?.recomendacao_limpeza ?? 'Recomendação da IA'} tone="amber" icon={Wrench} /><Metric label="Alertas registrados" value={String(data.alerts.length)} detail="Eventos no sistema" tone="neutral" icon={Layers3} /></div>
     {prediction && <div className={`recommendation recommendation-${tone}`}><span className="recommendation-icon"><AlertTriangle size={20} /></span><div><span>{risk === 'Alto' || risk === 'Crítico' ? 'ATENÇÃO OPERACIONAL' : 'RECOMENDAÇÃO ATUAL'}</span><strong>{prediction.recomendacao}</strong>{prediction.recomendacao_limpeza && <p>{prediction.recomendacao_limpeza}</p>}</div><button type="button" className="text-button" onClick={() => onNavigate('ai')}>Ver análise <ArrowUpRight size={15} /></button></div>}
-    <div className="content-grid overview-grid"><section className="panel chart-panel"><div className="panel-heading"><div><span className="eyebrow">TELEMETRIA</span><h2>Histórico do sensor</h2><p>Distância medida ao longo do tempo</p></div><span className="chart-unit">cm</span></div>{chartRows.length ? <div className="chart-area"><ResponsiveContainer width="100%" height="100%"><AreaChart data={chartRows} margin={{ top: 12, right: 10, bottom: 0, left: -15 }}><defs><linearGradient id="reading-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#d88d66" stopOpacity={0.28} /><stop offset="100%" stopColor="#d88d66" stopOpacity={0.01} /></linearGradient></defs><CartesianGrid stroke="#e8e8e1" strokeDasharray="3 5" vertical={false} /><XAxis dataKey="timeLabel" tickLine={false} axisLine={false} tick={{ fill: '#777f78', fontSize: 11 }} minTickGap={36} /><YAxis tickLine={false} axisLine={false} tick={{ fill: '#777f78', fontSize: 11 }} /><Tooltip contentStyle={{ borderRadius: 6, borderColor: '#dfe2da', fontSize: 12 }} formatter={(value) => [`${Number(value).toFixed(1)} cm`, 'Distância']} /><ReferenceLine y={15} stroke="#aa493b" strokeDasharray="5 5" label={{ value: 'Limite crítico · 15 cm', fill: '#aa493b', fontSize: 10 }} /><Area type="monotone" dataKey="valor_leitura" stroke="#c47652" strokeWidth={2.5} fill="url(#reading-fill)" activeDot={{ r: 5 }} /></AreaChart></ResponsiveContainer></div> : <div className="empty-state tall">Nenhuma leitura registrada ainda.</div>}<button type="button" className="panel-link" onClick={() => onNavigate('readings')}>Abrir histórico completo <ArrowUpRight size={15} /></button></section>
+    <div className="overview-map-grid">
+      <section className="panel overview-map-panel">
+        <div className="panel-heading"><div><span className="eyebrow">GEORREFERENCIAMENTO</span><h2>Visualização de risco em tempo real</h2><p>Bueiros, chamados SAC e área analisada</p></div><MapPinned size={18} /></div>
+        <div className="overview-map-preview"><MapPanel coordinates={coordinates} /></div>
+      </section>
+      <section className="panel recent-alerts-panel">
+        <div className="panel-heading"><div><span className="eyebrow">MONITORAMENTO</span><h2>Alertas recentes</h2><p>{data.alerts.length} registros na rede</p></div><span className="count-badge">{data.alerts.length}</span></div>
+        {recentAlerts.length ? <ul className="recent-alert-list">{recentAlerts.map((alert) => (
+          <li key={alert.id_alerta}>
+            <span className="recent-alert-icon"><AlertTriangle size={15} /></span>
+            <div><strong>{conciseAlertDescription(alert.descricao)}</strong></div>
+          </li>
+        ))}</ul> : <div className="empty-state">Nenhum alerta registrado.</div>}
+        <button type="button" className="panel-link" onClick={() => onNavigate('events')}>Ver todos os alertas <ArrowUpRight size={15} /></button>
+      </section>
+    </div>
+    <div className="content-grid overview-grid"><section className="panel chart-panel"><div className="panel-heading"><div><span className="eyebrow">TELEMETRIA</span><h2>Histórico do sensor</h2><p>Distância medida ao longo do tempo</p></div><span className="chart-unit">cm</span></div>{chartRows.length ? <div className="chart-area"><ResponsiveContainer width="100%" height="100%"><AreaChart data={chartRows} margin={{ top: 12, right: 10, bottom: 0, left: -15 }}><defs><linearGradient id="reading-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#d88d66" stopOpacity={0.28} /><stop offset="100%" stopColor="#d88d66" stopOpacity={0.01} /></linearGradient></defs><CartesianGrid stroke="#e8e8e1" strokeDasharray="3 5" vertical={false} /><XAxis dataKey="timeLabel" tickLine={false} axisLine={false} tick={{ fill: '#777f78', fontSize: 11 }} minTickGap={36} /><YAxis tickLine={false} axisLine={false} tick={{ fill: '#777f78', fontSize: 11 }} /><Tooltip contentStyle={{ borderRadius: 6, borderColor: '#dfe2da', fontSize: 12 }} formatter={(value) => [`${Number(value).toFixed(1)} cm`, 'Distância']} /><ReferenceLine y={15} stroke="#aa493b" strokeDasharray="5 5" label={{ value: 'Limite crítico · 15 cm', fill: '#aa493b', fontSize: 10 }} /><Area type="monotone" dataKey="valor_leitura" stroke="#c47652" strokeWidth={2.5} fill="url(#reading-fill)" activeDot={{ r: 5 }} /></AreaChart></ResponsiveContainer></div> : <div className={`empty-state tall${readingsError ? ' image-error' : ''}`} role={readingsError ? 'alert' : undefined}>{readingsError || 'Nenhuma leitura registrada ainda.'}</div>}<button type="button" className="panel-link" onClick={() => onNavigate('readings')}>Abrir histórico completo <ArrowUpRight size={15} /></button></section>
       <section className="panel conditions-panel"><div className="panel-heading"><div><span className="eyebrow">CONDIÇÕES EXTERNAS</span><h2>Contexto do local</h2><p>Clima e relevo consultados pela IA</p></div><Compass size={18} /></div><div className="condition-row"><span className="condition-icon weather-icon"><CloudRain size={17} /></span><div><small>Clima atual</small><strong>{data.weather?.disponivel ? data.weather.descricao_clima : 'Fallback sazonal ativo'}</strong></div><span className="condition-value">{data.weather?.temperatura_c != null ? `${data.weather.temperatura_c}°` : '—'}</span></div><div className="condition-details"><span>Chuva <strong>{data.weather?.chuva_mm_h ?? '—'} mm/h</strong></span><span>Umidade <strong>{data.weather?.umidade_pct ?? '—'}%</strong></span></div><div className="condition-row"><span className="condition-icon terrain-icon"><MapPinned size={17} /></span><div><small>Topografia</small><strong>{data.topography?.disponivel ? data.topography.classificacao_risco : 'Cota padrão'}</strong></div><span className="condition-value">{data.topography?.altitude_metros != null ? `${data.topography.altitude_metros} m` : '—'}</span></div><div className="condition-details"><span>Declividade <strong>{data.topography?.declividade_pct ?? '—'}%</strong></span><span>Fundo de vale <strong>{data.topography?.eh_fundo_de_vale ? 'Sim' : 'Não'}</strong></span></div><div className="context-location"><MapPinned size={14} /> Coordenadas selecionadas <span>ponto ativo</span></div></section></div>
     <div className="bottom-summary"><div><div className="summary-heading"><Droplets size={17} /><strong>Constância da limpeza</strong></div><div className="summary-value">{consistency.index == null ? 'Dados insuficientes' : <>{consistency.index.toFixed(0)}<span>/100</span></>}</div><p>{consistency.count} registros nos últimos 180 dias. São necessários ao menos 3 registros.</p><a href="https://www.itl.nist.gov/div898/software/dataplot/refman2/auxillar/coefvari.htm" target="_blank" rel="noreferrer">Método IC = 100 / (1 + CV) · referência NIST</a></div><div className="summary-separator" /><div><div className="summary-heading"><Layers3 size={17} /><strong>Atividade recente</strong></div><div className="activity-numbers"><span><b>{data.cleanings.length}</b>limpezas</span><span><b>{data.alerts.length}</b>alertas</span><span><b>{data.readings.length}</b>leituras</span></div><button type="button" className="panel-link" onClick={() => onNavigate('events')}>Consultar eventos <ArrowUpRight size={15} /></button></div></div>
   </>
 }
 
-function ReadingsView({ readings }: { readings: SensorReading[] }) {
-  return <section className="panel data-panel"><div className="panel-heading"><div><span className="eyebrow">TELEMETRIA IoT</span><h2>Histórico completo de leituras</h2><p>{readings.length} registros retornados pelos sensores</p></div><Activity size={19} /></div><Table rows={readings} rowKey={(row) => row.id_leitura} empty="Nenhuma leitura registrada ainda." columns={[{ label: 'ID', render: (row) => `#${row.id_leitura}` }, { label: 'Sensor', render: (row) => row.id_sensor }, { label: 'Leitura', render: (row) => <strong>{row.valor_leitura.toFixed(1)} {row.unidade_medida}</strong> }, { label: 'Data e hora', render: (row) => formatDate(row.data_hora) }, { label: 'Risco', render: (row) => row.nivel_risco ? <RiskBadge risk={row.nivel_risco} /> : '—' }, { label: 'Acionamento', render: (row) => row.acionar_limpeza ? `${row.tempo_limpeza_segundos ?? 0} s` : 'Não' }]} /></section>
+function ReadingsView({ readings, error }: { readings: SensorReading[]; error: string }) {
+  return <section className="panel data-panel"><div className="panel-heading"><div><span className="eyebrow">TELEMETRIA IoT</span><h2>Histórico completo de leituras</h2><p>{readings.length} registros retornados pelos sensores</p></div><Activity size={19} /></div>{error && <div className="image-error" role="alert"><AlertTriangle size={16} /><span>{error}</span></div>}<Table rows={readings} rowKey={(row) => row.id_leitura} empty={error ? 'Não foi possível consultar o histórico. Atualize os dados para tentar novamente.' : 'Nenhuma leitura registrada ainda.'} columns={[{ label: 'ID', render: (row) => `#${row.id_leitura}` }, { label: 'Sensor', render: (row) => row.id_sensor }, { label: 'Leitura', render: (row) => <strong>{row.valor_leitura.toFixed(1)} {row.unidade_medida}</strong> }, { label: 'Data e hora', render: (row) => formatDate(row.data_hora) }, { label: 'Risco', render: (row) => row.nivel_risco ? <RiskBadge risk={row.nivel_risco} /> : '—' }, { label: 'Acionamento', render: (row) => row.acionar_limpeza ? `${row.tempo_limpeza_segundos ?? 0} s` : 'Não' }]} /></section>
 }
 
 function ImagesView({ records, error, loading, onRefresh }: {
@@ -293,7 +323,7 @@ function EventPanel<T extends object>({ title, kicker, count, rows, rowKey, colu
 }
 
 function EventsView({ data }: { data: DashboardData }) {
-  return <div className="event-grid"><EventPanel title="Alertas" kicker="RISCO E OCORRÊNCIAS" count={data.alerts.length} empty="Nenhum alerta registrado." rows={data.alerts} rowKey={(row) => row.id_alerta} columns={[{ label: 'Descrição', render: (row) => row.descricao }, { label: 'Nível', render: (row) => row.nivel_criticidade }, { label: 'Data', render: (row) => formatDate(row.data_hora) }]} /><EventPanel title="Limpeza" kicker="MANUTENÇÃO" count={data.cleanings.length} empty="Nenhuma limpeza registrada." rows={data.cleanings} rowKey={(row) => row.id_limpeza} columns={[{ label: 'Status', render: (row) => row.status_limpeza }, { label: 'Data', render: (row) => formatDate(row.data_hora) }]} /><EventPanel title="Compactação" kicker="RESÍDUOS" count={data.compactions.length} empty="Nenhum registro de compactação." rows={data.compactions} rowKey={(row) => row.id_compactacao} columns={[{ label: 'Nível', render: (row) => `${row.nivel_residuo}%` }, { label: 'Data', render: (row) => formatDate(row.data_hora) }]} /><EventPanel title="Histórico do sistema" kicker="AUDITORIA" count={data.history.length} empty="Nenhum evento registrado." rows={data.history} rowKey={(row) => row.id_historico} columns={[{ label: 'Evento', render: (row) => row.descricao_evento }, { label: 'Data', render: (row) => formatDate(row.data_hora) }]} /></div>
+  return <div className="event-grid"><EventPanel title="Alertas" kicker="RISCO E OCORRÊNCIAS" count={data.alerts.length} empty="Nenhum alerta registrado." rows={data.alerts} rowKey={(row) => row.id_alerta} columns={[{ label: 'Descrição', render: (row) => conciseAlertDescription(row.descricao) }, { label: 'Nível', render: (row) => row.nivel_criticidade }, { label: 'Data', render: (row) => formatDate(row.data_hora) }]} /><EventPanel title="Limpeza" kicker="MANUTENÇÃO" count={data.cleanings.length} empty="Nenhuma limpeza registrada." rows={data.cleanings} rowKey={(row) => row.id_limpeza} columns={[{ label: 'Status', render: (row) => row.status_limpeza }, { label: 'Data', render: (row) => formatDate(row.data_hora) }]} /><EventPanel title="Compactação" kicker="RESÍDUOS" count={data.compactions.length} empty="Nenhum registro de compactação." rows={data.compactions} rowKey={(row) => row.id_compactacao} columns={[{ label: 'Nível', render: (row) => `${row.nivel_residuo}%` }, { label: 'Data', render: (row) => formatDate(row.data_hora) }]} /><EventPanel title="Histórico do sistema" kicker="AUDITORIA" count={data.history.length} empty="Nenhum evento registrado." rows={data.history} rowKey={(row) => row.id_historico} columns={[{ label: 'Evento', render: (row) => row.descricao_evento }, { label: 'Data', render: (row) => formatDate(row.data_hora) }]} /></div>
 }
 
 function AiView({ data, comparison, comparisonBusy, onCompare, sampleCount, onSampleCount, onTrain, trainingBusy, trainingResult }: {

@@ -1,25 +1,27 @@
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import Session
 
+from .. import models
 from .. import schemas
+from ..ai_predictor import PrevisorEntupimentoIA
+from ..config import BUEIRO_LATITUDE, BUEIRO_LONGITUDE
+from ..database import get_db
 from ..repositories.bueiros import BueiroJsonRepository, BueiroStorageError
 from ..repositories.inventario_bueiros import InventarioBueirosRepository
 from ..services.bueiros import BueiroService
 from ..services.catalogo_bueiros import CatalogoBueirosService
+from ..services.monitoramento import (
+    calcular_nivel_percentual,
+    calcular_status_bueiro,
+)
 
 router = APIRouter(prefix="/bueiros", tags=["Bueiros"])
-CSV_PATH = Path(__file__).resolve().parents[2] / "datasets_exemplo" / "bueiros.csv"
-SAC_CSV_PATH = (
-    Path(__file__).resolve().parents[2]
-    / "datasets_exemplo"
-    / "sac_limpeza_bueiro.csv"
-)
-ADICOES_PATH = (
-    Path(__file__).resolve().parents[2]
-    / "datasets_exemplo"
-    / "bueiros_adicionados.json"
-)
+DATASETS_DIR = Path(__file__).resolve().parents[2] / "datasets"
+CSV_PATH = DATASETS_DIR / "bueiros.csv"
+SAC_CSV_PATH = DATASETS_DIR / "sac_limpeza_bueiro.csv"
+ADICOES_PATH = DATASETS_DIR / "bueiros_adicionados.json"
 
 
 def get_bueiro_service() -> BueiroService:
@@ -118,3 +120,139 @@ def listar_solicitacoes_limpeza_proximas(
 ) -> dict[str, object]:
     """Busca solicitações SAC próximas à localização informada."""
     return service.listar_solicitacoes_proximas(lat, lon, raio_m, limite)
+
+
+def _serializar_bueiro_monitorado(
+    sensor: models.Sensor,
+    leitura: models.LeituraSensor | None,
+) -> dict[str, object]:
+    if sensor.latitude is None or sensor.longitude is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Coordenadas ausentes. Execute a migração de localização.",
+        )
+
+    nivel = (
+        calcular_nivel_percentual(leitura.valor_leitura, leitura.unidade_medida)
+        if leitura is not None
+        else 0.0
+    )
+    return {
+        "id": sensor.id_sensor,
+        "nome": f"Bueiro {sensor.id_sensor}",
+        "latitude": float(sensor.latitude),
+        "longitude": float(sensor.longitude),
+        "nivel": nivel,
+        "status": calcular_status_bueiro(nivel),
+        "ultima_leitura": leitura.data_hora if leitura is not None else None,
+    }
+
+
+@router.get(
+    "",
+    response_model=list[schemas.BueiroMonitoramentoOut],
+    summary="Lista bueiros monitorados",
+    description=(
+        "Retorna sensores cadastrados no MySQL com coordenadas, nível percentual "
+        "indicativo, status atual e horário da leitura mais recente."
+    ),
+)
+def listar_bueiros_monitorados(
+    db: Session = Depends(get_db),
+) -> list[dict[str, object]]:
+    sensores = db.query(models.Sensor).order_by(models.Sensor.id_sensor).all()
+    resposta = []
+    for sensor in sensores:
+        leitura = (
+            db.query(models.LeituraSensor)
+            .filter(models.LeituraSensor.id_sensor == sensor.id_sensor)
+            .order_by(
+                models.LeituraSensor.data_hora.desc(),
+                models.LeituraSensor.id_leitura.desc(),
+            )
+            .first()
+        )
+        resposta.append(_serializar_bueiro_monitorado(sensor, leitura))
+    return resposta
+
+
+@router.get(
+    "/{id_sensor}",
+    response_model=schemas.BueiroDetalheOut,
+    summary="Detalha um bueiro monitorado",
+    description="Inclui as 20 leituras mais recentes e a URL da foto mais nova.",
+)
+def obter_bueiro_monitorado(
+    id_sensor: int,
+    db: Session = Depends(get_db),
+) -> dict[str, object]:
+    sensor = db.get(models.Sensor, id_sensor)
+    if sensor is None:
+        raise HTTPException(status_code=404, detail="Bueiro não encontrado.")
+
+    leituras = (
+        db.query(models.LeituraSensor)
+        .filter(models.LeituraSensor.id_sensor == id_sensor)
+        .order_by(
+            models.LeituraSensor.data_hora.desc(),
+            models.LeituraSensor.id_leitura.desc(),
+        )
+        .limit(20)
+        .all()
+    )
+    leitura_atual = leituras[0] if leituras else None
+    bueiro = _serializar_bueiro_monitorado(sensor, leitura_atual)
+
+    imagem = (
+        db.query(models.RegistroImagem)
+        .join(
+            models.LeituraSensor,
+            models.RegistroImagem.id_leitura == models.LeituraSensor.id_leitura,
+        )
+        .filter(models.LeituraSensor.id_sensor == id_sensor)
+        .order_by(
+            models.RegistroImagem.data_hora.desc(),
+            models.RegistroImagem.id_imagem.desc(),
+        )
+        .first()
+    )
+    bueiro["historico"] = leituras
+    bueiro["foto_url"] = f"/camera/imagens/{imagem.id_imagem}" if imagem else None
+    return bueiro
+
+
+@router.get(
+    "/{id_sensor}/previsao",
+    response_model=schemas.PrevisaoBueiroOut,
+    summary="Prevê o risco do bueiro",
+    description="Consulta o motor multivariado de IA já utilizado pela API.",
+)
+def prever_risco_bueiro(
+    id_sensor: int,
+    db: Session = Depends(get_db),
+) -> dict[str, object]:
+    sensor = db.get(models.Sensor, id_sensor)
+    if sensor is None:
+        raise HTTPException(status_code=404, detail="Bueiro não encontrado.")
+
+    resultado = PrevisorEntupimentoIA.analisar_e_prever(
+        db=db,
+        id_sensor=id_sensor,
+        persistir=False,
+        lat=float(sensor.latitude or BUEIRO_LATITUDE),
+        lon=float(sensor.longitude or BUEIRO_LONGITUDE),
+    )
+    nivel = resultado.nivel_risco.casefold()
+    risco = (
+        "alto"
+        if "alto" in nivel or "crítico" in nivel or "critico" in nivel
+        else "moderado"
+        if "médio" in nivel or "medio" in nivel
+        else "baixo"
+    )
+    minutos = resultado.tempo_estimado_transbordo_min
+    return {
+        "risco": risco,
+        "horas_estimadas": round(minutos / 60) if minutos is not None else None,
+        "recomendacao": resultado.recomendacao,
+    }

@@ -61,12 +61,15 @@ class TestDecisoesLeitura(unittest.TestCase):
 
     def test_janela_recente_impede_novo_acionamento(self):
         service = LeituraService(MagicMock())
-        service.repository.criar_leitura.return_value = SimpleNamespace(
-            id_sensor=1,
-            id_leitura=12,
-            valor_leitura=8.0,
-            unidade_medida="cm",
-            data_hora=datetime(2026, 10, 15, 12),
+        service.repository.criar_leitura.return_value = (
+            SimpleNamespace(
+                id_sensor=1,
+                id_leitura=12,
+                valor_leitura=8.0,
+                unidade_medida="cm",
+                data_hora=datetime(2026, 10, 15, 12),
+            ),
+            True,
         )
         service.repository.existe_limpeza_recente.return_value = True
         etapas = []
@@ -105,12 +108,15 @@ class TestDecisoesLeitura(unittest.TestCase):
 
     def test_limpeza_gravada_pelo_preditor_nao_suprime_comando_ao_firmware(self):
         service = LeituraService(MagicMock())
-        service.repository.criar_leitura.return_value = SimpleNamespace(
-            id_sensor=1,
-            id_leitura=14,
-            valor_leitura=8.0,
-            unidade_medida="cm",
-            data_hora=datetime(2026, 10, 15, 12),
+        service.repository.criar_leitura.return_value = (
+            SimpleNamespace(
+                id_sensor=1,
+                id_leitura=14,
+                valor_leitura=8.0,
+                unidade_medida="cm",
+                data_hora=datetime(2026, 10, 15, 12),
+            ),
+            True,
         )
         service.repository.existe_limpeza_recente.side_effect = [False, True]
         resultado_ia = SimpleNamespace(
@@ -143,9 +149,12 @@ class TestDecisoesLeitura(unittest.TestCase):
 
     def test_falha_de_preditor_faz_rollback_e_e_propagada(self):
         repository = MagicMock()
-        repository.criar_leitura.return_value = SimpleNamespace(
-            id_sensor=1,
-            id_leitura=13,
+        repository.criar_leitura.return_value = (
+            SimpleNamespace(
+                id_sensor=1,
+                id_leitura=13,
+            ),
+            True,
         )
         service = LeituraService(repository)
 

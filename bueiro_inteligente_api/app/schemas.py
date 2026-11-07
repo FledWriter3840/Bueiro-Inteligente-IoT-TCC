@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, Field, field_serializer
@@ -116,10 +116,16 @@ class LeituraSensorCreate(ApiModel):
     id_sensor: int = Field(gt=0)
     valor_leitura: float = Field(allow_inf_nan=False)
     unidade_medida: str = Field(min_length=1, max_length=20)
+    data_hora: datetime | None = Field(
+        default=None,
+        description="Data/hora UTC em que o dispositivo coletou a leitura.",
+        examples=["2026-11-02T18:00:00Z"],
+    )
 
 class LeituraSensorOut(LeituraSensorCreate):
     id_leitura: int
     data_hora: datetime
+    duplicada: bool = False
     acionar_limpeza: bool = False
     tempo_limpeza_segundos: int = 0
     motivo_limpeza: str = ""
@@ -238,3 +244,65 @@ class ComparativoIAResult(ApiModel):
     motor_machine_learning: AnaliseIAMLResult
     convergencia: bool
     observacao: str
+
+
+class BueiroMonitoramentoOut(ApiModel):
+    id: int
+    nome: str
+    latitude: float
+    longitude: float
+    nivel: float
+    status: Literal["livre", "atencao", "critico"]
+    ultima_leitura: datetime | None
+
+
+class BueiroDetalheOut(BueiroMonitoramentoOut):
+    historico: list[LeituraSensorOut]
+    foto_url: str | None = None
+
+
+class PrevisaoBueiroOut(ApiModel):
+    risco: Literal["baixo", "moderado", "alto"]
+    horas_estimadas: int | None
+    recomendacao: str
+
+
+class OcorrenciaCreate(ApiModel):
+    model_config = ConfigDict(
+        str_strip_whitespace=True,
+        extra="forbid",
+        allow_inf_nan=False,
+    )
+
+    descricao: str | None = Field(default=None, max_length=2000)
+    latitude: float = Field(ge=-90, le=90, examples=[-23.5505])
+    longitude: float = Field(ge=-180, le=180, examples=[-46.6333])
+    gravidade: Literal["leve", "moderada", "grave"] = Field(
+        default="moderada",
+        examples=["moderada"],
+    )
+
+
+class OcorrenciaStatusUpdate(ApiModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["aberta", "em_analise", "resolvida"]
+
+
+class OcorrenciaOut(ApiModel):
+    id: int
+    descricao: str | None
+    latitude: float
+    longitude: float
+    foto_url: str | None
+    gravidade: Literal["leve", "moderada", "grave"]
+    status: Literal["aberta", "em_analise", "resolvida"]
+    criado_em: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ResumoOut(ApiModel):
+    bueiros_por_status: dict[str, int]
+    ocorrencias_por_status: dict[str, int]
+    ocorrencias_por_gravidade: dict[str, int]

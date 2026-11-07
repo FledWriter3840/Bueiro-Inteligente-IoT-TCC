@@ -1,5 +1,6 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .. import models, schemas
@@ -17,21 +18,61 @@ class LeituraRepository:
         """Reverte a transação atual."""
         self.session.rollback()
 
-    def criar_leitura(self, leitura: schemas.LeituraSensorCreate) -> models.LeituraSensor:
-        """Persiste uma leitura e retorna o registro atualizado."""
+    def criar_leitura(
+        self,
+        leitura: schemas.LeituraSensorCreate,
+    ) -> tuple[models.LeituraSensor, bool]:
+        """Persiste uma leitura e ignora reenvios com timestamp já registrado."""
+        timestamp = leitura.data_hora
+        if timestamp is not None and timestamp.tzinfo is not None:
+            timestamp = timestamp.astimezone(timezone.utc).replace(tzinfo=None)
+
+        if timestamp is not None:
+            existente = (
+                self.session.query(models.LeituraSensor)
+                .filter(
+                    models.LeituraSensor.id_sensor == leitura.id_sensor,
+                    models.LeituraSensor.timestamp_dispositivo == timestamp,
+                )
+                .first()
+            )
+            if existente is not None:
+                return existente, False
+
+        valores_leitura = {
+            "valor_leitura": leitura.valor_leitura,
+            "unidade_medida": leitura.unidade_medida,
+            "id_sensor": leitura.id_sensor,
+        }
+        if timestamp is not None:
+            valores_leitura["data_hora"] = timestamp
+            valores_leitura["timestamp_dispositivo"] = timestamp
+
         registro = models.LeituraSensor(
-            valor_leitura=leitura.valor_leitura,
-            unidade_medida=leitura.unidade_medida,
-            id_sensor=leitura.id_sensor,
+            **valores_leitura,
         )
         try:
             self.session.add(registro)
             self.session.commit()
             self.session.refresh(registro)
+        except IntegrityError:
+            self.session.rollback()
+            if timestamp is not None:
+                existente = (
+                    self.session.query(models.LeituraSensor)
+                    .filter(
+                        models.LeituraSensor.id_sensor == leitura.id_sensor,
+                        models.LeituraSensor.timestamp_dispositivo == timestamp,
+                    )
+                    .first()
+                )
+                if existente is not None:
+                    return existente, False
+            raise
         except Exception:
             self.session.rollback()
             raise
-        return registro
+        return registro, True
 
     def existe_limpeza_recente(
         self,
